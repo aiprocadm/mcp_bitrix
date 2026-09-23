@@ -1,0 +1,58 @@
+{
+  "name": "bitrix24-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP-сервер для Bitrix24: строго проверенные инструменты поверх Bitrix24 REST API",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "main": "dist/index.js",
+  "bin": {
+    "bitrix24-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts --transport stdio",
+    "dev:http": "tsx src/index.ts --transport http",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --exclude tests/live",
+    "test:security": "vitest run tests/security",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "start:stdio": "node dist/index.js --transport stdio",
+    "start:http": "node dist/index.js --transport http",
+    "setup": "tsx src/cli/setup.ts",
+    "doctor": "tsx src/cli/doctor.ts",
+    "bitrix:profile": "tsx src/cli/profile.ts",
+    "schemas:export": "tsx scripts/export-tool-schemas.ts",
+    "mcp:smoke": "tsx src/cli/mcp-smoke.ts",
+    "check:secrets": "tsx scripts/check-secrets.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/fastify": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "dotenv": "^18.0.3",
+    "fastify": "^5.12.5",
+    "pino": "^10.3.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.0.0",
+    "prettier": "^3.9.0",
+    "tsx": "^4.23.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

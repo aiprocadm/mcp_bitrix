@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "bitrix24": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/opt/bitrix24-mcp-server/dist/index.js",
+        "--transport",
+        "stdio",
+        "--config",
+        "/opt/bitrix24-mcp-server/.env"
+      ]
+    }
+  }
+}
