@@ -38,7 +38,7 @@ describe('MCP через InMemoryTransport (T41)', () => {
     t.app.close();
   });
 
-  it('tools/list: пять инструментов, верные annotations и строгие схемы', async () => {
+  it('tools/list: в read-only видны только читающие инструменты, верные annotations и строгие схемы', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((x) => x.name).sort();
     expect(names).toEqual([
@@ -46,6 +46,9 @@ describe('MCP через InMemoryTransport (T41)', () => {
       'bitrix_connection_info',
       'bitrix_rest_call',
       'bitrix_server_version',
+      'crm_fields_get',
+      'crm_get_record',
+      'crm_list_records',
       'operation_status',
     ]);
     for (const tool of tools) {
