@@ -11,6 +11,9 @@ import { connectionInfoTool } from './system/connection-info.js';
 import { operationStatusTool } from './system/operation-status.js';
 import { restCallTool } from './system/rest-call.js';
 import { serverVersionTool } from './system/server-version.js';
+import { taskCreateTool } from './tasks/task-create.js';
+import { taskGetTool } from './tasks/task-get.js';
+import { taskListTool } from './tasks/task-list.js';
 import type { ToolDefinition } from './types.js';
 
 export function allTools(): readonly ToolDefinition[] {
@@ -26,5 +29,9 @@ export function allTools(): readonly ToolDefinition[] {
     crmGetRecordTool,
     crmCreateRecordTool,
     crmFieldsGetTool,
+    // §9.8 задачи (MVP)
+    taskCreateTool,
+    taskGetTool,
+    taskListTool,
   ];
 }

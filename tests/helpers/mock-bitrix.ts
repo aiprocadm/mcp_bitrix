@@ -209,6 +209,61 @@ export function dealRecord(id: number, overrides: Record<string, unknown> = {}):
   };
 }
 
+/** tasks.task.getfields: {fields:{NAME:{title,type,primary?,required?}}} — усечённая реальная форма. */
+export const TASK_FIELDS = {
+  fields: {
+    ID: { title: 'ID', type: 'integer', primary: true },
+    PARENT_ID: { title: 'Родительская задача', type: 'integer' },
+    TITLE: { title: 'Название', type: 'string', required: true },
+    DESCRIPTION: { title: 'Описание', type: 'string' },
+    RESPONSIBLE_ID: { title: 'Исполнитель', type: 'integer', required: true },
+    CREATED_BY: { title: 'Постановщик', type: 'integer' },
+    ACCOMPLICES: { title: 'Соисполнители', type: 'integer' },
+    AUDITORS: { title: 'Наблюдатели', type: 'integer' },
+    DEADLINE: { title: 'Крайний срок', type: 'datetime' },
+    GROUP_ID: { title: 'Группа', type: 'integer' },
+    STATUS: {
+      title: 'Статус',
+      type: 'enum',
+      values: {
+        '2': 'Ждёт выполнения',
+        '3': 'Выполняется',
+        '4': 'Ждёт контроля',
+        '5': 'Завершена',
+        '6': 'Отложена',
+      },
+    },
+    PRIORITY: { title: 'Приоритет', type: 'enum', values: { '0': 'Низкий', '1': 'Средний', '2': 'Высокий' } },
+    CREATED_DATE: { title: 'Дата создания', type: 'datetime' },
+    CHANGED_DATE: { title: 'Дата изменения', type: 'datetime' },
+    ALLOW_CHANGE_DEADLINE: { title: 'Можно менять срок', type: 'boolean' },
+    UF_CRM_TASK: { title: 'CRM', type: 'string' },
+    UF_TASK_COST: { title: 'Стоимость', type: 'double' },
+  },
+};
+
+/** Ответ tasks.task.get/list — camelCase. */
+export function taskRecord(id: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: String(id),
+    parentId: null,
+    title: `[MCP TEST] Задача ${id}`,
+    description: '',
+    status: '2',
+    priority: '1',
+    responsibleId: '7',
+    createdBy: '7',
+    deadline: '2026-10-01T18:00:00+03:00',
+    groupId: '0',
+    createdDate: '2026-09-23T10:00:00+03:00',
+    ...overrides,
+  };
+}
+
+export function tasks(from: number, count: number): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, i) => taskRecord(from + i));
+}
+
 export function legacyOk(result: unknown, extra: Record<string, unknown> = {}): MockResponse {
   return {
     status: 200,

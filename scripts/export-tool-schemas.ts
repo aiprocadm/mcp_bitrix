@@ -59,7 +59,7 @@ for (const t of allTools()) {
 lines.push(
   '## Запланировано (ТЗ §9, не реализовано)',
   '',
-  'MVP (этапы 8–9): `task_create`, `task_get`, `task_list`, `chat_send_message`, `disk_upload_file`, `calendar_create_event`. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.',
+  'MVP (этап 9): `chat_send_message`, `disk_upload_file`, `calendar_create_event`. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.',
   '',
   'Полная версия (§11): остальные строки таблиц §9.2–§9.14. Каждый инструмент появляется в разделе «Реализовано» только после кода, схем, тестов и документации; заглушки с `success:true` не допускаются.',
   '',

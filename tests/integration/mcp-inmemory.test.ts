@@ -50,6 +50,8 @@ describe('MCP через InMemoryTransport (T41)', () => {
       'crm_get_record',
       'crm_list_records',
       'operation_status',
+      'task_get',
+      'task_list',
     ]);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);

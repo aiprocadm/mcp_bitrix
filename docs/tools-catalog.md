@@ -16,6 +16,9 @@
 | `crm_get_record` | crm | read | true | false | true | да | [json](schemas/crm_get_record.json) |
 | `crm_create_record` | crm | create | false | false | false | да | [json](schemas/crm_create_record.json) |
 | `crm_fields_get` | crm | read | true | false | true | да | [json](schemas/crm_fields_get.json) |
+| `task_create` | tasks | create | false | false | false | да | [json](schemas/task_create.json) |
+| `task_get` | tasks | read | true | false | true | да | [json](schemas/task_get.json) |
+| `task_list` | tasks | read | true | false | true | да | [json](schemas/task_list.json) |
 
 ## Описания
 
@@ -55,8 +58,20 @@
 
 Схема полей сущности CRM с портала: имя, тип, обязательность, только-чтение, множественность, варианты списков. Использовать перед crm_create_record и при ошибке VALIDATION_ERROR/UNKNOWN_FIELD, чтобы узнать точные имена и обязательные поля (включая пользовательские UF_CRM_*). В MVP поддерживается только entityType=deal.
 
+### `task_create`
+
+Поставить задачу в Bitrix24 (tasks.task.add) на известного сотрудника. Использовать, когда пользователь явно просит создать задачу и известен ID ответственного (не имя). Срок — ISO 8601 с часовым поясом. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с operationId и планом — задача ещё не создана; человек подтверждает план в терминале; повторный вызов с теми же параметрами и approvalId создаёт задачу ровно один раз. dryRun=true только показывает план. Участники получат уведомления.
+
+### `task_get`
+
+Задача Bitrix24 целиком по ID в рамках доступных полей (tasks.task.get). Использовать, когда известен ID задачи и нужны её поля: название, описание, ответственный, срок, статус, участники, привязки. select ограничивает поля (имена — ВЕРХНИЙ_РЕГИСТР, например TITLE, DEADLINE, RESPONSIBLE_ID). Комментарии и чек-листы — отдельные инструменты полной версии.
+
+### `task_list`
+
+Страница задач Bitrix24 (tasks.task.list) по ответственному, статусу, группе и произвольному фильтру. Использовать, когда нужен список задач по условию: «мои задачи в работе», «задачи проекта», «просроченные». Статус: new, pending (ждёт выполнения), inProgress, awaitingControl, completed, deferred. Ключи filter — ИМЕНА_ПОЛЕЙ с префиксами Bitrix (например {"<DEADLINE": "2026-10-01T00:00:00+03:00"}). До 50 задач за вызов; продолжение — по cursor.
+
 ## Запланировано (ТЗ §9, не реализовано)
 
-MVP (этапы 8–9): `task_create`, `task_get`, `task_list`, `chat_send_message`, `disk_upload_file`, `calendar_create_event`. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.
+MVP (этап 9): `chat_send_message`, `disk_upload_file`, `calendar_create_event`. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.
 
 Полная версия (§11): остальные строки таблиц §9.2–§9.14. Каждый инструмент появляется в разделе «Реализовано» только после кода, схем, тестов и документации; заглушки с `success:true` не допускаются.
