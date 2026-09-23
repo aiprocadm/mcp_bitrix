@@ -4,13 +4,13 @@
 
 ## Текущее положение
 
-|                       |                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| Дата обновления       | 2026-09-23 (срез 4)                                                                              |
-| Последний влитый срез | срез 3, PR #3 (этапы 1–7); срез 4 (этап 8) — в PR                                                |
-| Текущий этап          | **9. MVP chat/calendar/disk** (`chat_send_message`, `calendar_create_event`, `disk_upload_file`) |
-| Следующие             | 10 (сводные тесты), 11 (README/инструкции), 12 (сервер и ChatGPT)                                |
-| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                         |
+|                       |                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Дата обновления       | 2026-09-23 (срез 5)                                                                                                                                                                       |
+| Последний влитый срез | срез 4, PR #4 (этапы 1–8); срез 5 (этап 9) — в PR                                                                                                                                         |
+| Текущий этап          | **10. Тесты (сводно)**: сводная проверка приёмки §20.1 по каждому критерию, transport-тесты, блокирующие дефекты; затем 11 (README/инструкции: Windows, Desktop, backup, troubleshooting) |
+| Следующие             | 11 (README/инструкции), 12 (сервер и ChatGPT), 13 (полная версия)                                                                                                                         |
+| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                                                                                  |
 
 ## Этапы (ТЗ §22)
 
@@ -24,12 +24,21 @@
 | 6   | Политика записи            | ✅ 23.09     | `src/security/mutation-executor.ts`, `approval-service.ts`, `idempotency.ts`, `src/files/`, `src/cli/approval-review.ts`, `file-stage.ts` |
 | 7   | MVP CRM tools              | ✅ 23.09     | `src/tools/crm/`: `crm_list_records`, `crm_get_record`, `crm_create_record`, `crm_fields_get` (entityType=deal)                           |
 | 8   | MVP task tools             | ✅ 23.09     | `src/tools/tasks/`: `task_create`, `task_get`, `task_list` (legacy `tasks.task.*`, схема из `tasks.task.getfields`)                       |
-| 9   | MVP chat/calendar/disk     | ⏳ следующий | `chat_send_message` (`im.message.add`), `calendar_create_event` (`calendar.event.add`), `disk_upload_file` (`disk.folder.uploadfile`)     |
-| 10  | Тесты (сводно)             | —            | T01…T48 — что уже покрыто, см. ниже                                                                                                       |
+| 9   | MVP chat/calendar/disk     | ✅ 23.09     | `src/tools/chat/send-message.ts`, `src/tools/calendar/create-event.ts` (+ `time.ts`), `src/tools/disk/upload-file.ts`                     |
+| 10  | Тесты (сводно)             | ⏳ следующий | сводный отчёт по §20.1, transport-тесты, live-smoke сценарий §10.3 (готовность без портала)                                               |
 | 11  | README и инструкции        | частично     | README, setup, webhook, claude-code написаны; Windows/Desktop/troubleshooting/backup — дополнить                                          |
 | 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                                |
 | 13  | Полная версия              | —            | §11 ТЗ                                                                                                                                    |
 | 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                                     |
+
+## Что именно сделано (срез 5, этап 9)
+
+- `chat_send_message` (`src/tools/chat/send-message.ts`): `dialogId` только `\d+` или `chat\d+`; план из `im.dialog.get` (тип, название, участники) + полный текст; `im.message.add` от владельца вебхука; verify — `im.dialog.messages.get` (LIMIT 20), не найдено/недоступно → `verified=false`.
+- `calendar_create_event` (`src/tools/calendar/create-event.ts`, `time.ts`): ISO с явным смещением + IANA-зона (по умолчанию `DEFAULT_TIMEZONE`, проверка по `Intl.supportedValuesOf`), `to > from`, ≤31 дня, `allDay` → YYYY-MM-DD/`skip_time=Y`; `sectionId` сверяется с `calendar.section.get`; в Bitrix идут `from_ts/to_ts`, `timezone_from/to`, `is_meeting/attendees/host`; verify — `calendar.event.getbyid`: название, даты «DD.MM.YYYY HH:MM:SS» в TZ_FROM → момент (DST учтён), участники.
+- `disk_upload_file` (`src/tools/disk/upload-file.ts`): ровно один источник — `fileToken` (staging) или inline base64; `disk.folder.get` + проверка имени через `disk.folder.getchildren` (`error`/`rename`); аргументы хеша — по содержимому (`fileSha256`, `fileSize`), `fileHash` в подтверждении; `readVerified` перед отправкой (T26); `disk.folder.uploadfile` (`fileContent`, `generateUniqueName`); verify — `disk.file.get` по размеру; наружу только `DETAIL_URL`; precheck на появившееся имя.
+- Каталог: 15 инструментов; все 11 MVP из §10.1 есть.
+- Тесты: +16 (170). Покрыты: T28 полностью (DST, all-day), T26 на Диске, отказ до плана по dialogId/датам/зоне/папке/имени/расширению, полные пути с replay для всех трёх, скрытие в read-only.
+- Открытые сверки на живом портале: приём `from_ts/to_ts` в `calendar.event.add` (документированы, но не проверены), формат дат `getbyid`, поле `user_counter` в `im.dialog.get`, форма ответа `disk.folder.uploadFile`.
 
 ## Что именно сделано (срез 4, этап 8)
 
@@ -75,7 +84,8 @@
 
 ## Что НЕ сделано / ограничения
 
-- Из 11 MVP-инструментов есть 8 (5 системных, 3 CRM, 3 задач — итого 11 с `crm_fields_get` как вспомогательным; по списку §10.1 не хватает трёх): `chat_send_message`, `disk_upload_file`, `calendar_create_event` — этап 9. Образцы write-инструментов — `src/tools/crm/create-record.ts`, `src/tools/tasks/task-create.ts`.
+- Все 11 MVP-инструментов §10.1 реализованы (плюс `crm_fields_get`, `task_list` и т. п. — 15 в каталоге). Ни один не проверен на реальном портале. Образцы write-инструментов — `src/tools/crm/create-record.ts`, `src/tools/tasks/task-create.ts`, `src/tools/disk/upload-file.ts`.
+- Живой smoke-сценарий §10.3 (`npm run test:live`) ещё не написан — этап 10.
 - `task_get` без `include` (чек-листы/комментарии), `task_update`/`task_complete`/`task_delete` — полная версия.
 - `crm_get_record` без `include` (дела/комментарии/товары) — полная версия; `crm_search_records`, `crm_update_record` — полная версия.
 - Антивирусный сканер staged-файлов не интегрирован: `UPLOAD_SCAN_REQUIRED=true` блокирует загрузку честно (этап 12).

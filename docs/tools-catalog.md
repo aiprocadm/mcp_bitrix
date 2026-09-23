@@ -19,6 +19,9 @@
 | `task_create` | tasks | create | false | false | false | да | [json](schemas/task_create.json) |
 | `task_get` | tasks | read | true | false | true | да | [json](schemas/task_get.json) |
 | `task_list` | tasks | read | true | false | true | да | [json](schemas/task_list.json) |
+| `calendar_create_event` | calendar | create | false | false | false | да | [json](schemas/calendar_create_event.json) |
+| `chat_send_message` | chat | create | false | false | false | да | [json](schemas/chat_send_message.json) |
+| `disk_upload_file` | disk | upload | false | false | false | да | [json](schemas/disk_upload_file.json) |
 
 ## Описания
 
@@ -70,8 +73,20 @@
 
 Страница задач Bitrix24 (tasks.task.list) по ответственному, статусу, группе и произвольному фильтру. Использовать, когда нужен список задач по условию: «мои задачи в работе», «задачи проекта», «просроченные». Статус: new, pending (ждёт выполнения), inProgress, awaitingControl, completed, deferred. Ключи filter — ИМЕНА_ПОЛЕЙ с префиксами Bitrix (например {"<DEADLINE": "2026-10-01T00:00:00+03:00"}). До 50 задач за вызов; продолжение — по cursor.
 
+### `calendar_create_event`
+
+Создать одиночное событие или встречу в календаре Bitrix24 (calendar.event.add). Использовать, когда известны тип и владелец календаря (type=user + ownerId сотрудника, или group/company) и sectionId раздела. Даты — ISO 8601 с явным смещением (2026-10-01T10:00:00+03:00), timezone — IANA-зона (по умолчанию зона портала из конфигурации). allDay=true — даты YYYY-MM-DD. Участники (attendeeIds) получат приглашения. Повторяющиеся события не поддерживаются. Порядок: без approvalId — APPROVAL_REQUIRED с планом; после подтверждения тот же вызов с approvalId создаёт событие ровно один раз.
+
+### `chat_send_message`
+
+Отправить одно сообщение в известный диалог Bitrix24 от имени владельца интеграции (im.message.add). dialogId — числовой ID сотрудника для личного диалога или chat<id> для группового чата; из имён он не выводится. Использовать только когда пользователь явно просит написать в конкретный чат и dialogId известен. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (диалог, название, полный текст) — сообщение ещё не отправлено; после подтверждения человеком повторный вызов с approvalId отправляет ровно один раз.
+
+### `disk_upload_file`
+
+Загрузить подготовленный файл в папку Диска Bitrix24 (disk.folder.uploadFile). Использовать, когда пользователь просит положить файл в известную папку. Файл готовит человек: `npm run file:stage -- --path <файл в UPLOAD_ROOT>` даёт fileToken; для маленького тестового файла допустим inline base64 (до 256 КиБ). Пути на сервере и URL для скачивания не принимаются. conflictPolicy: error — при совпадении имени отказ; rename — портал добавит суффикс. Порядок: без approvalId — APPROVAL_REQUIRED с планом (папка, имя, размер, sha256); после подтверждения тот же вызов с approvalId загружает ровно один раз. Публичные ссылки не создаются.
+
 ## Запланировано (ТЗ §9, не реализовано)
 
-MVP (этап 9): `chat_send_message`, `disk_upload_file`, `calendar_create_event`. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.
+Все 11 инструментов MVP (ТЗ §10.1) реализованы. CRM-инструменты выше поддерживают только entityType=deal; лиды/контакты/компании/smart — полная версия.
 
 Полная версия (§11): остальные строки таблиц §9.2–§9.14. Каждый инструмент появляется в разделе «Реализовано» только после кода, схем, тестов и документации; заглушки с `success:true` не допускаются.
