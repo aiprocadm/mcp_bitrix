@@ -59,6 +59,15 @@ export class CapabilityService {
     this.db.run('DELETE FROM capabilities_cache WHERE cache_key LIKE ?', `${this.client.auth.portalKey}:%`);
   }
 
+  /** Кэш метаданных портала (поля CRM и т. п.), TTL 5 минут, привязан к порталу. */
+  getCached<T>(kind: string, id: string): T | undefined {
+    return this.readCache<T>(this.cacheKey(kind, id));
+  }
+
+  setCached(kind: string, id: string, value: unknown): void {
+    this.writeCache(this.cacheKey(kind, id), value);
+  }
+
   /** Список scope, доступных авторизации (метод `scope`, legacy). */
   async scopes(requestId: string, refresh = false): Promise<string[]> {
     const key = this.cacheKey('scopes', 'all');

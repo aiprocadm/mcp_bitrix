@@ -1,0 +1,331 @@
+{
+  "name": "crm_create_record",
+  "title": "Создать запись CRM",
+  "description": "Создать запись CRM (в MVP — сделку через crm.deal.add). Поля проверяются по схеме портала (crm_fields_get): неизвестные и read-only отклоняются, обязательные должны быть заполнены. Использовать, когда пользователь явно просит создать сделку. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с operationId и планом — запись ещё не сделана; человек подтверждает план в терминале; повторный вызов с теми же параметрами и approvalId создаёт сделку ровно один раз. dryRun=true только показывает план. Могут сработать роботы и уведомления стадии.",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "entityType": {
+        "type": "string",
+        "const": "deal",
+        "description": "Тип сущности; в MVP только deal"
+      },
+      "fields": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{0,99}$"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 20000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          ]
+        },
+        "description": "Поля сделки по схеме портала: TITLE обязателен; CATEGORY_ID, STAGE_ID, ASSIGNED_BY_ID, OPPORTUNITY, CURRENCY_ID, UF_CRM_*"
+      },
+      "dryRun": {
+        "default": false,
+        "description": "Только рассчитать план и проверки; ничего не записывать и не создавать подтверждение",
+        "type": "boolean"
+      },
+      "idempotencyKey": {
+        "description": "UUID, одинаковый при повторе того же намерения; обязателен, если dryRun=false",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "approvalId": {
+        "description": "operationId, подтверждённый человеком через npm run approval:review",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "entityType",
+      "fields",
+      "dryRun"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "const": "deal"
+              },
+              "dryRun": {
+                "type": "boolean"
+              },
+              "plan": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "validationLevel": {
+                "type": "string"
+              },
+              "id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "record": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "entityType"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}
