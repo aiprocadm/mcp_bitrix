@@ -28,9 +28,22 @@ const PATTERNS: readonly { re: RegExp; sub: string }[] = [
   { re: /(bearer\s+)[A-Za-z0-9._~+/=-]+/gi, sub: '$1[REDACTED]' },
   // e-mail
   { re: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, sub: '[EMAIL]' },
-  // телефоны: +7 999 123-45-67, 8(999)1234567 и т. п. (7+ цифр с разделителями)
-  { re: /\+?\d[\d\s()-]{6,}\d/g, sub: '[PHONE]' },
 ];
+
+/**
+ * Телефон: +7 999 123-45-67, 8(999)1234567 — 10..15 цифр с разделителями, не внутри hex/UUID/ISO-дат.
+ * Кандидат ограничен не-буквенно-цифровыми символами; хеши (внутри букв), даты (8 цифр)
+ * и UUID (≥4 дефисов) телефоном не считаются.
+ */
+const PHONE_CANDIDATE = /(?<![A-Za-z0-9])\+?\d[\d\s()-]{8,}\d(?![A-Za-z0-9])/g;
+
+function redactPhones(input: string): string {
+  return input.replace(PHONE_CANDIDATE, (m) => {
+    const digits = m.replace(/\D/g, '').length;
+    const dashes = (m.match(/-/g) ?? []).length;
+    return digits >= 10 && digits <= 15 && dashes <= 3 ? '[PHONE]' : m;
+  });
+}
 
 export function redactString(input: string): string {
   let out = input;
@@ -38,7 +51,7 @@ export function redactString(input: string): string {
     if (out.includes(secret)) out = out.split(secret).join('[REDACTED]');
   }
   for (const { re, sub } of PATTERNS) out = out.replace(re, sub);
-  return out;
+  return redactPhones(out);
 }
 
 /** Рекурсивно редактирует строки внутри произвольного значения (для логов). */

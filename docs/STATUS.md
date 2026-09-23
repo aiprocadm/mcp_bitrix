@@ -4,32 +4,44 @@
 
 ## Текущее положение
 
-|                       |                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Дата обновления       | 2026-09-23                                                                                                               |
-| Последний влитый срез | — (первый PR открыт, см. ниже)                                                                                           |
-| Текущий этап          | **6. Политика записи** (MutationExecutor, approval CLI, idempotency ledger, файловый staging)                            |
-| Следующие             | 7 (CRM tools), 8 (task tools), 9 (chat/calendar/disk), 10 (сводные тесты), 11 (README/инструкции), 12 (сервер и ChatGPT) |
-| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                 |
+|                       |                                                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Дата обновления       | 2026-09-23 (срез 2)                                                                                            |
+| Последний влитый срез | срез 1, PR #1 (этапы 1–5); срез 2 (этап 6) — в PR                                                              |
+| Текущий этап          | **7. MVP CRM tools** (`crm_list_records`, `crm_get_record`, `crm_create_record` для сделок, `crm.deal.fields`) |
+| Следующие             | 8 (task tools), 9 (chat/calendar/disk), 10 (сводные тесты), 11 (README/инструкции), 12 (сервер и ChatGPT)      |
+| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                       |
 
 ## Этапы (ТЗ §22)
 
-| №   | Этап                       | Статус       | Где                                                                                                                         |
-| --- | -------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Инициализация проекта      | ✅ 23.09     | `package.json`, `docs/adr/0001-stack-and-versions.md`                                                                       |
-| 2   | Конфигурация и логирование | ✅ 23.09     | `src/config/`, `src/logging/`, `src/security/redaction.ts`, `src/storage/`, `npm run setup`                                 |
-| 3   | Bitrix API client          | ✅ 23.09     | `src/bitrix/` (webhook provider, legacy/v3 адаптеры, ошибки, лимитер, retry, пагинация с курсорами)                         |
-| 4   | MCP server bootstrap       | ✅ 23.09     | `src/mcp/` (stdio, Streamable HTTP через Fastify-адаптер, реестр, envelope)                                                 |
-| 5   | Diagnostic tools           | ✅ 23.09     | `src/tools/system/` — 5 инструментов; `npm run doctor`, `bitrix:profile`, `mcp:smoke`                                       |
-| 6   | Политика записи            | ⏳ следующий | `src/security/mutation-executor.ts`, `approval-service.ts`, `idempotency.ts`, `src/cli/approval-review.ts`, `file-stage.ts` |
-| 7   | MVP CRM tools              | —            | `crm_list_records`, `crm_get_record`, `crm_create_record` (entityType=deal)                                                 |
-| 8   | MVP task tools             | —            | `task_create`, `task_get`, `task_list`                                                                                      |
-| 9   | MVP chat/calendar/disk     | —            | `chat_send_message`, `calendar_create_event`, `disk_upload_file`                                                            |
-| 10  | Тесты (сводно)             | —            | T01…T48 — что уже покрыто, см. ниже                                                                                         |
-| 11  | README и инструкции        | частично     | README, setup, webhook, claude-code написаны; Windows/Desktop/troubleshooting/backup — дополнить                            |
-| 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                  |
-| 13  | Полная версия              | —            | §11 ТЗ                                                                                                                      |
-| 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                       |
+| №   | Этап                       | Статус       | Где                                                                                                                                       |
+| --- | -------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Инициализация проекта      | ✅ 23.09     | `package.json`, `docs/adr/0001-stack-and-versions.md`                                                                                     |
+| 2   | Конфигурация и логирование | ✅ 23.09     | `src/config/`, `src/logging/`, `src/security/redaction.ts`, `src/storage/`, `npm run setup`                                               |
+| 3   | Bitrix API client          | ✅ 23.09     | `src/bitrix/` (webhook provider, legacy/v3 адаптеры, ошибки, лимитер, retry, пагинация с курсорами)                                       |
+| 4   | MCP server bootstrap       | ✅ 23.09     | `src/mcp/` (stdio, Streamable HTTP через Fastify-адаптер, реестр, envelope)                                                               |
+| 5   | Diagnostic tools           | ✅ 23.09     | `src/tools/system/` — 5 инструментов; `npm run doctor`, `bitrix:profile`, `mcp:smoke`                                                     |
+| 6   | Политика записи            | ✅ 23.09     | `src/security/mutation-executor.ts`, `approval-service.ts`, `idempotency.ts`, `src/files/`, `src/cli/approval-review.ts`, `file-stage.ts` |
+| 7   | MVP CRM tools              | ⏳ следующий | `crm_list_records`, `crm_get_record`, `crm_create_record` (entityType=deal); `src/tools/crm/`                                             |
+| 8   | MVP task tools             | —            | `task_create`, `task_get`, `task_list`                                                                                                    |
+| 9   | MVP chat/calendar/disk     | —            | `chat_send_message`, `calendar_create_event`, `disk_upload_file`                                                                          |
+| 10  | Тесты (сводно)             | —            | T01…T48 — что уже покрыто, см. ниже                                                                                                       |
+| 11  | README и инструкции        | частично     | README, setup, webhook, claude-code написаны; Windows/Desktop/troubleshooting/backup — дополнить                                          |
+| 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                                |
+| 13  | Полная версия              | —            | §11 ТЗ                                                                                                                                    |
+| 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                                     |
+
+## Что именно сделано (срез 2, этап 6)
+
+- `MutationExecutor` (`src/security/mutation-executor.ts`) — единственная точка записи. Порядок: аудит доступен → dryRun (только план) → idempotencyKey обязателен → повтор по ключу (replay / unknown / conflict / тот же план) → без approvalId `APPROVAL_REQUIRED` с operationId и планом → с approvalId сверка principal/portal/tool/argsHash/policyVersion/stateHash/fileHash/ключа, атомарный переход approved→executing, precheck (CONFLICT), perform, verify, результат в ledger (зашифрован). Одновременные вызовы с одним ключом делят одно выполнение (T08). Лимит 10 подготовок/мин на оператора.
+- `ApprovalService` — prepare/readPlan/approve/deny/listPending; планы в SQLite зашифрованы (AES-GCM, AAD = operationId), TTL 10 мин.
+- Ledger (`storage/operations.ts`): состояния prepared→approved→executing→succeeded/failed/unknown, denied, expired; после рестарта executing→unknown (T16); таблица idempotency с TTL 7 дней.
+- Файлы (`src/files/`): `file:stage` только из UPLOAD_ROOT (realpath, без симлинков, без `.env`/ключей/хранилищ), allowlist расширений + проверка сигнатур, лимиты 10 MiB / 256 KiB inline, копия в STAGING_DIR (0600), sha256, TTL 24 ч, сверка хеша перед отправкой (T26); при `UPLOAD_SCAN_REQUIRED=true` загрузка блокируется до интеграции сканера (этап 12).
+- CLI: `npm run approval:review -- --id <id>` (план целиком, ввод слова ПОДТВЕРЖДАЮ/ОТКЛОНЯЮ, без `--yes`, отказ без TTY), `--list`; `npm run file:stage -- --path <абс. путь>`.
+- Общие схемы записи (`src/schemas/common.ts`): `dryRun`, `idempotencyKey` (обязателен без dryRun), `approvalId`, `expectedStateHash`.
+- `ToolContext` получил `mutations` и `files`; MVP-инструменты этапов 7–9 обязаны идти через `ctx.mutations.execute(...)` с `summary` по §15.3.
+- Тесты: +29 (119 всего). Покрыты T08, T09, T12, T13, T14, T15, T16, T25, T26, T27, T44-для-записи, отказ CLI без TTY, лимит подготовок.
+- Попутно: редактор секретов больше не принимает хеши/даты/UUID за телефоны (ломало вывод CLI); тест T42 сам создаёт ключ шифрования (не зависит от `npm run setup`).
 
 ## Что именно сделано (срез 1, этапы 1–5)
 
@@ -46,7 +58,8 @@
 
 ## Что НЕ сделано / ограничения
 
-- Ни одной записи в Bitrix пока нет: подтверждения (§8.2), idempotency ledger и staging файлов — этап 6.
+- Ни одного именованного инструмента записи пока нет (этапы 7–9); контур подтверждений проверен на тестовом инструменте `test_create` (`tests/helpers/fake-write-tool.ts`) — образец для реальных.
+- Антивирусный сканер staged-файлов не интегрирован: `UPLOAD_SCAN_REQUIRED=true` блокирует загрузку честно (этап 12).
 - OAuth (Bitrix и MCP) — конфигурация принимает поля, но режимы `oauth` намеренно блокируются `CONFIG_INVALID` до этапов 12/13.
 - REST 3.0 адаптер написан и покрыт unit-тестами, но форму ответов нужно сверить с OpenAPI реального портала (`rest.documentation.openapi`) — пометка `unchecked` в `bitrix_capabilities`.
 - Реальный портал не подключался: `doctor` без `--offline`, `bitrix:profile` и `test:live` на живом портале — `not-run`.
@@ -60,7 +73,11 @@
 - `fetch` в Node не даёт подменить заголовок `Host` — тест DNS-rebinding идёт через `node:http`.
 - `fastify.close()` виснет на открытых SSE-соединениях — перед закрытием `server.closeAllConnections()`.
 - Vitest: `console.log` в тестах не показывается в кратком выводе; для отладки писать в файл.
-- Guard worktree в этой среде отклоняет сложные bash-команды с `cd`/heredoc/переменными в путях — файлы писать инструментом Write, команды разбивать.
+- Guard worktree в этой среде отклоняет сложные bash-команды с `cd`/heredoc/переменными в путях/конвейерами — файлы писать инструментом Write, команды разбивать, пути писать буквально.
+- Прямая проверка «CLI не принимает ввод через pipe» из bash невозможна (guard) — она живёт тестом `tests/security/approval-cli-no-tty.test.ts`, который сам запускает CLI.
+- `data/` не в git: тесты, запускающие настоящий процесс, обязаны сами создавать ключ (`ensureMasterKey(..., {create:true})`), иначе на чистой копии `CONFIG_INVALID`.
+- Редактор секретов применяется и к выводу CLI (`out()`): слишком широкий шаблон «телефона» ломал хеши и даты. Любой новый шаблон проверять на sha256/ISO-дате/UUID.
+- После squash-слияния PR ветка worktree расходится с `main` — новый срез начинать в новом worktree от `origin/main`, старый не трогать из-под guard.
 
 ## Открытые вопросы владельцу (не блокируют код)
 

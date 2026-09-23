@@ -221,6 +221,7 @@
                   "UNSAFE_FILE",
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
+                  "RATE_LIMITED",
                   "INTERNAL_ERROR"
                 ]
               },

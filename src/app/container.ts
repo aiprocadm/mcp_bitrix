@@ -14,7 +14,10 @@ import { loadPolicies, type Policies } from '../config/policy.js';
 import { AppError } from '../errors/app-error.js';
 import { AuditLog } from '../logging/audit.js';
 import { createLogger, type AppLogger } from '../logging/logger.js';
+import { FileStaging } from '../files/staging.js';
+import { ApprovalService } from '../security/approval-service.js';
 import { ensureMasterKey, SecretBox } from '../security/crypto.js';
+import { MutationExecutor } from '../security/mutation-executor.js';
 import { OutputPolicyEngine } from '../security/output-policy.js';
 import { Database } from '../storage/database.js';
 import { OperationsStore } from '../storage/operations.js';
@@ -34,6 +37,9 @@ export interface AppContainer {
   readonly capabilities: CapabilityService;
   readonly cursors: CursorStore;
   readonly operations: OperationsStore;
+  readonly approvals: ApprovalService;
+  readonly mutations: MutationExecutor;
+  readonly files: FileStaging;
   readonly outputPolicy: OutputPolicyEngine;
   readonly principal: Principal;
   readonly tools: readonly ToolDefinition[];
@@ -101,6 +107,31 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
   operations.expireStale();
   cursors.cleanupExpired();
   const outputPolicy = new OutputPolicyEngine(policies.output);
+  const approvals = new ApprovalService(
+    operations,
+    secretBox,
+    config.limits.approvalTtlSeconds,
+    policies.version,
+  );
+  const mutations = new MutationExecutor(operations, approvals, secretBox, audit, logger, {
+    idempotencyTtlHours: config.limits.idempotencyTtlHours,
+    policyVersion: policies.version,
+    confirmAllWrites: config.policy.confirmAllWrites,
+    maxPreparationsPerMinute: 10,
+  });
+  const files = new FileStaging(
+    db,
+    {
+      uploadRoot: config.storage.uploadRoot,
+      stagingDir: config.storage.stagingDir,
+      maxUploadBytes: config.files.maxUploadBytes,
+      maxInlineFileBytes: config.files.maxInlineFileBytes,
+      ttlSeconds: config.files.uploadTtlSeconds,
+      scanRequired: config.files.scanRequired,
+    },
+    logger,
+  );
+  files.cleanupExpired();
 
   const tools = allTools().filter((t) => config.policy.enabledModules.has(t.module));
 
@@ -117,6 +148,9 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
     capabilities,
     cursors,
     operations,
+    approvals,
+    mutations,
+    files,
     outputPolicy,
     principal,
     tools,

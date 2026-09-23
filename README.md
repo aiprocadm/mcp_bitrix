@@ -15,7 +15,8 @@ MCP-сервер для Bitrix24: строго проверенные инстр
 - Единый клиент Bitrix24: таймауты, лимиты частоты, безопасные повторы только для чтения, курсоры пагинации.
 - Два транспорта одного ядра: `stdio` и Streamable HTTP (loopback).
 - Пять диагностических инструментов: `bitrix_connection_info`, `bitrix_server_version`, `bitrix_capabilities`, `bitrix_rest_call` (только чтение по allowlist), `operation_status`.
-- Режим только чтения по умолчанию (`READ_ONLY_MODE=true`). Инструменты записи появятся на этапах 6–9 и всегда потребуют подтверждения человеком.
+- Режим только чтения по умолчанию (`READ_ONLY_MODE=true`).
+- Контур записи (этап 6): любая запись сначала возвращает `APPROVAL_REQUIRED` с `operationId`, человек смотрит план и подтверждает в терминале (`npm run approval:review`), затем тот же вызов с `approvalId` выполняется ровно один раз. Повтор с тем же `idempotencyKey` дубль не создаёт. Именованные инструменты записи появятся на этапах 7–9.
 
 ## Требования
 
@@ -58,6 +59,8 @@ claude mcp list
 | `npm run bitrix:profile`                                         | Один безопасный запрос `profile`                                              |
 | `npm run mcp:smoke -- --transport stdio\|http`                   | Проверка через официальный MCP-клиент                                         |
 | `npm run schemas:export`                                         | JSON Schema инструментов → `docs/schemas/`, каталог → `docs/tools-catalog.md` |
+| `npm run approval:review -- --id <operationId>` / `-- --list`    | Просмотр плана записи и решение человека (только в терминале, без `--yes`)    |
+| `npm run file:stage -- --path <абс. путь в UPLOAD_ROOT>`         | Подготовка файла к загрузке на Диск: проверка, копия, `fileToken`             |
 | `npm run check:secrets`                                          | Поиск секретов в отслеживаемых файлах                                         |
 | `npm start` / `npm run start:stdio` / `npm run start:http`       | Production-запуск из `dist/`                                                  |
 

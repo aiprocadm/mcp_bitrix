@@ -5,12 +5,15 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { MOCK_ENV } from '../helpers/app.js';
+import { ensureMasterKey } from '../../src/security/crypto.js';
+import { MOCK_ENV, testConfig } from '../helpers/app.js';
 
 const ROOT = path.resolve(MOCK_ENV, '..', '..', '..');
 
 describe('stdio: чистота stdout (T42)', () => {
   it('каждая строка stdout — JSON-RPC сообщение; логи уходят в stderr', async () => {
+    // Настоящий процесс читает ключ из data/test (не в git) — создаём его, как делает npm run setup.
+    ensureMasterKey(testConfig().storage.secretsKeyFile, { create: true });
     const child = spawn(
       process.execPath,
       ['--import', 'tsx', path.join(ROOT, 'src/index.ts'), '--transport', 'stdio', '--config', MOCK_ENV],
@@ -32,7 +35,11 @@ describe('stdio: чистота stdout (T42)', () => {
       method: 'initialize',
       params: { protocolVersion: '2026-07-28', capabilities: {}, clientInfo: { name: 't', version: '0' } },
     });
-    await waitFor(() => stdout.includes('"id":1'), 15_000);
+    await waitFor(
+      () => stdout.includes('"id":1'),
+      15_000,
+      () => stderr,
+    );
     send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     await waitFor(() => stdout.includes('"id":2'), 15_000);
@@ -59,10 +66,12 @@ describe('stdio: чистота stdout (T42)', () => {
   }, 40_000);
 });
 
-async function waitFor(cond: () => boolean, timeoutMs: number): Promise<void> {
+async function waitFor(cond: () => boolean, timeoutMs: number, diag?: () => string): Promise<void> {
   const start = Date.now();
   while (!cond()) {
-    if (Date.now() - start > timeoutMs) throw new Error('timeout waiting for stdout');
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`timeout waiting for stdout; stderr: ${diag ? diag().slice(0, 500) : '(нет)'}`);
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
 }

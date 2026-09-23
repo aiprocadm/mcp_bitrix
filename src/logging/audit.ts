@@ -55,9 +55,17 @@ export class AuditLog {
     return { enabled: this.enabled, available: this.available, lastError: this.lastError };
   }
 
-  /** Перед любой записью в Bitrix. */
+  /** Перед любой записью в Bitrix: проактивная проба журнала, а не только память о прошлой ошибке. */
   assertAvailableForWrite(): void {
     if (!this.enabled) return;
+    if (this.available && this.db) {
+      try {
+        this.db.get('SELECT 1 AS one FROM audit LIMIT 1');
+      } catch (e) {
+        this.available = false;
+        this.lastError = e instanceof Error ? e.name : 'unknown';
+      }
+    }
     if (!this.available) {
       throw new AppError('AUDIT_UNAVAILABLE', 'Журнал аудита недоступен; запись в Bitrix24 запрещена', {
         nextAction: 'Восстановите доступ к базе данных и перезапустите сервер',

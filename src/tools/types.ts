@@ -14,6 +14,8 @@ import type { ModuleName } from '../config/modules.js';
 import type { Policies } from '../config/policy.js';
 import type { AuditLog } from '../logging/audit.js';
 import type { AppLogger } from '../logging/logger.js';
+import type { FileStaging } from '../files/staging.js';
+import type { MutationExecutor } from '../security/mutation-executor.js';
 import type { OutputPolicyEngine } from '../security/output-policy.js';
 import type { OperationsStore } from '../storage/operations.js';
 import type { Envelope } from '../mcp/result.js';
@@ -34,6 +36,9 @@ export interface ToolContext {
   readonly capabilities: CapabilityService;
   readonly cursors: CursorStore;
   readonly operations: OperationsStore;
+  /** Единственный путь к записи в Bitrix24 (ТЗ §12 mutation-executor). */
+  readonly mutations: MutationExecutor;
+  readonly files: FileStaging;
   readonly audit: AuditLog;
   readonly outputPolicy: OutputPolicyEngine;
   readonly logger: AppLogger;
