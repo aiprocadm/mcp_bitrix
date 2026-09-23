@@ -1,19 +1,26 @@
-# секреты и локальные настройки
+# секреты и локальные настройки (ТЗ §8.1)
 .env
 .env.*
 !.env.example
+policies/*.json
+!policies/*.example.json
+
+# runtime-данные: SQLite, ключ шифрования, staging файлов, токены
+data/
+logs/
+tmp/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.pem
 
 # зависимости и сборка
 node_modules/
 dist/
-build/
-__pycache__/
-*.pyc
-.venv/
-venv/
+coverage/
 
-# логи, временное
+# служебное
 *.log
-tmp/
 .DS_Store
 .claude/worktrees/

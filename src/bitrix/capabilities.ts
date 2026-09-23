@@ -1,0 +1,134 @@
+/**
+ * Проверка доступности методов на портале (ТЗ §9.2 bitrix_capabilities).
+ * `method.get` показывает, существует ли метод и доступен ли он текущей авторизации,
+ * но НЕ доступ ко всем его объектам. Кэш 5 минут в SQLite.
+ */
+import { AppError } from '../errors/app-error.js';
+import type { Database } from '../storage/database.js';
+import type { BitrixClient } from './client.js';
+import { listMethods, type MethodDescriptor } from './method-registry.js';
+
+export type CapabilityStatus = 'supported' | 'unavailable' | 'unchecked' | 'forbidden-by-policy' | 'error';
+
+export interface MethodCapability {
+  method: string;
+  apiVersion: 'legacy' | 'v3';
+  scope: string | undefined;
+  status: CapabilityStatus;
+  reason?: string;
+}
+
+interface ProbeResult {
+  isExisting: boolean;
+  isAvailable: boolean;
+}
+
+const TTL_MS = 5 * 60_000;
+
+export class CapabilityService {
+  constructor(
+    private readonly db: Database,
+    private readonly client: BitrixClient,
+  ) {}
+
+  private cacheKey(kind: string, id: string): string {
+    return `${this.client.auth.portalKey}:${kind}:${id}`;
+  }
+
+  private readCache<T>(key: string): T | undefined {
+    const row = this.db.get<{ value_json: string; expires_at: string }>(
+      'SELECT value_json, expires_at FROM capabilities_cache WHERE cache_key = ?',
+      key,
+    );
+    if (!row || Date.parse(row.expires_at) < Date.now()) return undefined;
+    return JSON.parse(row.value_json) as T;
+  }
+
+  private writeCache(key: string, value: unknown): void {
+    const now = Date.now();
+    this.db.run(
+      'INSERT OR REPLACE INTO capabilities_cache (cache_key, value_json, fetched_at, expires_at) VALUES (?, ?, ?, ?)',
+      key,
+      JSON.stringify(value),
+      new Date(now).toISOString(),
+      new Date(now + TTL_MS).toISOString(),
+    );
+  }
+
+  invalidate(): void {
+    this.db.run('DELETE FROM capabilities_cache WHERE cache_key LIKE ?', `${this.client.auth.portalKey}:%`);
+  }
+
+  /** Список scope, доступных авторизации (метод `scope`, legacy). */
+  async scopes(requestId: string, refresh = false): Promise<string[]> {
+    const key = this.cacheKey('scopes', 'all');
+    if (!refresh) {
+      const cached = this.readCache<string[]>(key);
+      if (cached) return cached;
+    }
+    const r = await this.client.call('legacy', 'scope', {}, { requestId });
+    const scopes = Array.isArray(r.result) ? r.result.filter((s): s is string => typeof s === 'string') : [];
+    this.writeCache(key, scopes);
+    return scopes;
+  }
+
+  async probe(descriptor: MethodDescriptor, requestId: string, refresh = false): Promise<MethodCapability> {
+    if (descriptor.apiVersion === 'v3') {
+      return {
+        method: descriptor.method,
+        apiVersion: 'v3',
+        scope: descriptor.scope,
+        status: 'unchecked',
+        reason: 'Проверка REST 3.0 выполняется через OpenAPI портала на следующем этапе',
+      };
+    }
+    const key = this.cacheKey('method', descriptor.method);
+    let probe = refresh ? undefined : this.readCache<ProbeResult>(key);
+    if (!probe) {
+      try {
+        const r = await this.client.call('legacy', 'method.get', { name: descriptor.method }, { requestId });
+        const obj = (
+          r.result && typeof r.result === 'object' && !Array.isArray(r.result) ? r.result : {}
+        ) as Record<string, unknown>;
+        probe = { isExisting: obj['isExisting'] === true, isAvailable: obj['isAvailable'] === true };
+        this.writeCache(key, probe);
+      } catch (e) {
+        const err = AppError.from(e);
+        return {
+          method: descriptor.method,
+          apiVersion: 'legacy',
+          scope: descriptor.scope,
+          status: 'error',
+          reason: err.code,
+        };
+      }
+    }
+    if (!probe.isExisting)
+      return {
+        method: descriptor.method,
+        apiVersion: 'legacy',
+        scope: descriptor.scope,
+        status: 'unavailable',
+        reason: 'метод отсутствует на портале',
+      };
+    if (!probe.isAvailable)
+      return {
+        method: descriptor.method,
+        apiVersion: 'legacy',
+        scope: descriptor.scope,
+        status: 'unavailable',
+        reason: 'метод недоступен текущей авторизации (scope/права)',
+      };
+    return { method: descriptor.method, apiVersion: 'legacy', scope: descriptor.scope, status: 'supported' };
+  }
+
+  async probeAll(
+    requestId: string,
+    filter: (d: MethodDescriptor) => boolean,
+    refresh = false,
+  ): Promise<MethodCapability[]> {
+    const out: MethodCapability[] = [];
+    for (const d of listMethods().filter(filter)) out.push(await this.probe(d, requestId, refresh));
+    return out;
+  }
+}

@@ -1,0 +1,33 @@
+# Профиль для VPS (ТЗ §17.6). До этапа 12 (OAuth MCP) порт публикуется только на loopback:
+# наружу сервер выставляется через HTTPS reverse proxy и только с MCP_AUTH_MODE=oauth.
+services:
+  bitrix24-mcp:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - ./config:/app/config:ro # здесь лежит .env (права 600)
+      - mcp-data:/app/data # SQLite, ключ, staging — постоянный том
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0 # внутри контейнера; снаружи виден только 127.0.0.1 хоста
+      DATA_DIR: /app/data
+      DATABASE_URL: file:/app/data/mcp.sqlite
+      SECRETS_KEY_FILE: /app/data/secrets/master.key
+      UPLOAD_ROOT: /app/data/inbox
+      STAGING_DIR: /app/data/staging
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mcp-data:

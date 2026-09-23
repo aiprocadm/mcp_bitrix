@@ -1,0 +1,20 @@
+{
+  "version": "2026-09-23",
+  "rawAllowlist": [
+    { "apiVersion": "legacy", "method": "profile" },
+    { "apiVersion": "legacy", "method": "user.current" },
+    { "apiVersion": "legacy", "method": "method.get" },
+    { "apiVersion": "legacy", "method": "scope" },
+    { "apiVersion": "legacy", "method": "crm.deal.list" },
+    { "apiVersion": "legacy", "method": "crm.deal.get" },
+    { "apiVersion": "legacy", "method": "crm.deal.fields" },
+    { "apiVersion": "legacy", "method": "crm.category.list" },
+    { "apiVersion": "legacy", "method": "crm.status.list" },
+    { "apiVersion": "legacy", "method": "tasks.task.list" },
+    { "apiVersion": "legacy", "method": "tasks.task.get" },
+    { "apiVersion": "legacy", "method": "calendar.section.get" },
+    { "apiVersion": "legacy", "method": "disk.folder.getchildren" },
+    { "apiVersion": "legacy", "method": "disk.storage.getlist" },
+    { "apiVersion": "legacy", "method": "im.recent.list" }
+  ]
+}

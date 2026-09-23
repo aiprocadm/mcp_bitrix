@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "bitrix24": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Projects\\bitrix24-mcp-server\\dist\\index.js",
+        "--transport",
+        "stdio",
+        "--config",
+        "C:\\Projects\\bitrix24-mcp-server\\.env"
+      ]
+    }
+  }
+}
