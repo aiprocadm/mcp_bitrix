@@ -74,6 +74,8 @@ export async function dispatch(
     capabilities: app.capabilities,
     cursors: app.cursors,
     operations: app.operations,
+    mutations: app.mutations,
+    files: app.files,
     audit: app.audit,
     outputPolicy: app.outputPolicy,
     logger: app.logger.child({ requestId, tool: def.name }),

@@ -33,6 +33,17 @@ describe('redaction (T19)', () => {
   it('скрывает e-mail и телефоны', () => {
     expect(redactString('ivan.testov@example.com')).toBe('[EMAIL]');
     expect(redactString('звоните +7 999 123-45-67')).toBe('звоните [PHONE]');
+    expect(redactString('тел 8(999)1234567')).toBe('тел [PHONE]');
+  });
+
+  it('не принимает за телефон хеши, даты ISO и UUID', () => {
+    const sha = 'a26377fc7bbc5555555555bcfbeb53af618d464db431b35c772b084a950d0d0';
+    expect(redactString(`sha256 ${sha}`)).toBe(`sha256 ${sha}`);
+    expect(redactString('до 2026-09-24T16:03:54.813Z')).toBe('до 2026-09-24T16:03:54.813Z');
+    expect(redactString('id 11111111-1111-4111-8111-111111111111')).toBe(
+      'id 11111111-1111-4111-8111-111111111111',
+    );
+    expect(redactString('заказ 12345')).toBe('заказ 12345');
   });
 
   it('редактирует значения рекурсивно и скрывает чувствительные ключи целиком', () => {

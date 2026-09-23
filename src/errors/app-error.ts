@@ -29,6 +29,7 @@ export const ERROR_CODES = [
   'UNSAFE_FILE',
   'AUDIT_UNAVAILABLE',
   'ACCESS_DENIED',
+  'RATE_LIMITED',
   'INTERNAL_ERROR',
 ] as const;
 
@@ -47,6 +48,9 @@ export interface ErrorDetails {
   operationId?: string;
   expiresAt?: string;
   reason?: string;
+  /** Безопасное краткое описание плана записи (без секретов) при APPROVAL_REQUIRED. */
+  plan?: Record<string, unknown>;
+  status?: string;
 }
 
 const RETRYABLE: ReadonlySet<ErrorCode> = new Set(['BITRIX_TIMEOUT', 'BITRIX_RATE_LIMITED']);
