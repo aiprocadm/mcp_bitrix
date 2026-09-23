@@ -52,20 +52,21 @@ claude mcp list
 
 ## Команды
 
-| Команда                                                          | Что делает                                                                    |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `npm run dev` / `npm run dev:http`                               | Запуск из исходников: stdio / loopback HTTP                                   |
-| `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` | Проверки и сборка                                                             |
-| `npm run test:security`                                          | Только негативные сценарии безопасности                                       |
-| `npm run setup`                                                  | Первичная настройка: политики, каталоги, ключ                                 |
-| `npm run doctor [-- --offline]`                                  | Диагностика; `--offline` — без обращения к порталу                            |
-| `npm run bitrix:profile`                                         | Один безопасный запрос `profile`                                              |
-| `npm run mcp:smoke -- --transport stdio\|http`                   | Проверка через официальный MCP-клиент                                         |
-| `npm run schemas:export`                                         | JSON Schema инструментов → `docs/schemas/`, каталог → `docs/tools-catalog.md` |
-| `npm run approval:review -- --id <operationId>` / `-- --list`    | Просмотр плана записи и решение человека (только в терминале, без `--yes`)    |
-| `npm run file:stage -- --path <абс. путь в UPLOAD_ROOT>`         | Подготовка файла к загрузке на Диск: проверка, копия, `fileToken`             |
-| `npm run check:secrets`                                          | Поиск секретов в отслеживаемых файлах                                         |
-| `npm start` / `npm run start:stdio` / `npm run start:http`       | Production-запуск из `dist/`                                                  |
+| Команда                                                                              | Что делает                                                                                                      |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `npm run dev` / `npm run dev:http`                                                   | Запуск из исходников: stdio / loopback HTTP                                                                     |
+| `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`                     | Проверки и сборка                                                                                               |
+| `npm run test:security`                                                              | Только негативные сценарии безопасности                                                                         |
+| `npm run setup`                                                                      | Первичная настройка: политики, каталоги, ключ                                                                   |
+| `npm run doctor [-- --offline]`                                                      | Диагностика; `--offline` — без обращения к порталу                                                              |
+| `npm run bitrix:profile`                                                             | Один безопасный запрос `profile`                                                                                |
+| `npm run mcp:smoke -- --transport stdio\|http`                                       | Проверка через официальный MCP-клиент                                                                           |
+| `npm run schemas:export`                                                             | JSON Schema инструментов → `docs/schemas/`, каталог → `docs/tools-catalog.md`                                   |
+| `npm run approval:review -- --id <operationId>` / `-- --list`                        | Просмотр плана записи и решение человека (только в терминале, без `--yes`)                                      |
+| `npm run file:stage -- --path <абс. путь в UPLOAD_ROOT>`                             | Подготовка файла к загрузке на Диск: проверка, копия, `fileToken`                                               |
+| `npm run test:live -- --read-only` / `-- --write --prepare` / `-- --write --execute` | Живая проверка портала по §10.3 (только при `LIVE_TESTS_ENABLED=true`); записи — в две фазы через подтверждение |
+| `npm run check:secrets`                                                              | Поиск секретов в отслеживаемых файлах                                                                           |
+| `npm start` / `npm run start:stdio` / `npm run start:http`                           | Production-запуск из `dist/`                                                                                    |
 
 Любая команда принимает `--config <путь к .env>`; без него берётся `./.env` или `CONFIG_PATH`.
 

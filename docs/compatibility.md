@@ -11,7 +11,7 @@
 | Zod                                                    | 4.6.5                            | `z.toJSONSchema` для экспорта схем                                                         |
 | Fastify                                                | 5.12.5                           | `/healthz`, `/readyz`, `/mcp` в тестах                                                     |
 | TypeScript                                             | 5.9.3                            | `tsc --noEmit`, сборка `dist/`                                                             |
-| Vitest                                                 | 5.0.1                            | 170 тестов                                                                                 |
+| Vitest                                                 | 5.0.1                            | 177 тестов                                                                                 |
 | SQLite                                                 | встроенный `node:sqlite` Node 24 | миграции, WAL, транзакции в тестах                                                         |
 
 ## Клиенты MCP
