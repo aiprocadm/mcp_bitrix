@@ -4,13 +4,13 @@
 
 ## Текущее положение
 
-|                       |                                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------------- |
-| Дата обновления       | 2026-09-23 (срез 3)                                                                                       |
-| Последний влитый срез | срез 2, PR #2 (этапы 1–6); срез 3 (этап 7) — в PR                                                         |
-| Текущий этап          | **8. MVP task tools** (`task_create`, `task_get`, `task_list` через `tasks.task.*` legacy, scope `task`)  |
-| Следующие             | 8 (task tools), 9 (chat/calendar/disk), 10 (сводные тесты), 11 (README/инструкции), 12 (сервер и ChatGPT) |
-| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                  |
+|                       |                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| Дата обновления       | 2026-09-23 (срез 4)                                                                              |
+| Последний влитый срез | срез 3, PR #3 (этапы 1–7); срез 4 (этап 8) — в PR                                                |
+| Текущий этап          | **9. MVP chat/calendar/disk** (`chat_send_message`, `calendar_create_event`, `disk_upload_file`) |
+| Следующие             | 10 (сводные тесты), 11 (README/инструкции), 12 (сервер и ChatGPT)                                |
+| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                         |
 
 ## Этапы (ТЗ §22)
 
@@ -23,13 +23,22 @@
 | 5   | Diagnostic tools           | ✅ 23.09     | `src/tools/system/` — 5 инструментов; `npm run doctor`, `bitrix:profile`, `mcp:smoke`                                                     |
 | 6   | Политика записи            | ✅ 23.09     | `src/security/mutation-executor.ts`, `approval-service.ts`, `idempotency.ts`, `src/files/`, `src/cli/approval-review.ts`, `file-stage.ts` |
 | 7   | MVP CRM tools              | ✅ 23.09     | `src/tools/crm/`: `crm_list_records`, `crm_get_record`, `crm_create_record`, `crm_fields_get` (entityType=deal)                           |
-| 8   | MVP task tools             | ⏳ следующий | `task_create`, `task_get`, `task_list`; `src/tools/tasks/`                                                                                |
-| 9   | MVP chat/calendar/disk     | —            | `chat_send_message`, `calendar_create_event`, `disk_upload_file`                                                                          |
+| 8   | MVP task tools             | ✅ 23.09     | `src/tools/tasks/`: `task_create`, `task_get`, `task_list` (legacy `tasks.task.*`, схема из `tasks.task.getfields`)                       |
+| 9   | MVP chat/calendar/disk     | ⏳ следующий | `chat_send_message` (`im.message.add`), `calendar_create_event` (`calendar.event.add`), `disk_upload_file` (`disk.folder.uploadfile`)     |
 | 10  | Тесты (сводно)             | —            | T01…T48 — что уже покрыто, см. ниже                                                                                                       |
 | 11  | README и инструкции        | частично     | README, setup, webhook, claude-code написаны; Windows/Desktop/troubleshooting/backup — дополнить                                          |
 | 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                                |
 | 13  | Полная версия              | —            | §11 ТЗ                                                                                                                                    |
 | 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                                     |
+
+## Что именно сделано (срез 4, этап 8)
+
+- Реестр: `tasks.task.getfields` (legacy, scope `task`; в документации имя `getFields`, REST регистрирует в нижнем регистре — сверить `bitrix_capabilities` на живом портале).
+- `src/tools/tasks/task-fields.ts` — валидатор по `tasks.task.getfields` (`primary`→read-only, `required`, `values`→enum; серверные поля CREATED_DATE/STATUS_CHANGED_* и т. п. запрещены к записи), дата-время только с явной зоной (`TIMEZONE_REQUIRED`), статусы `new/pending/inProgress/awaitingControl/completed/deferred` ↔ коды 1–6, привязки CRM `D_/L_/C_/CO_<id>`.
+- `src/tools/tasks/task-service.ts` — `listTasks` (курсоры; `result.tasks[]` camelCase, `next/total` сверху), `getTask` (`result.task`), `createTask` (без `task.id` → `OPERATION_OUTCOME_UNKNOWN`), `compareTask` (ответственный + срок как момент времени + название), `taskBrief`.
+- Инструменты: `task_list` (responsibleId/createdBy/groupId/status + filter/order/select в UPPER_CASE; в ответе `statusName`), `task_get` (brief + полная задача), `task_create` (title, responsibleId, description, deadline с зоной и не в прошлом, groupId, auditorIds, accompliceIds, crmBindings, customFields UF_*; план: `tasks.task.add`, зона портала, поля, риски про уведомления/группу/CRM; verify: `tasks.task.get` по ID с select и сверка).
+- Тесты: +15 (154 всего): валидатор (getfields, запись, T28 зона, фильтры, привязки, сверка), интеграция через MCP-клиент (list 50→3 страницы с UPPER_CASE в запросе и camelCase в ответе, отказ до портала, get/NOT_FOUND, скрытие create в read-only, VALIDATION_ERROR до плана, dryRun, полный путь с replay, подмена ответственного → verified=false, ответ без id → unknown).
+- Грабля legacy `tasks.task.*`: запрос — `RESPONSIBLE_ID`, ответ — `responsibleId`; мок и валидатор это учитывают, при первом живом подключении сверить форму `tasks.task.get` (поле `task`).
 
 ## Что именно сделано (срез 3, этап 7)
 
@@ -66,7 +75,8 @@
 
 ## Что НЕ сделано / ограничения
 
-- Из 11 MVP-инструментов есть 5 системных + 3 CRM (`crm_list_records`, `crm_get_record`, `crm_create_record`) и вспомогательный `crm_fields_get`; остались `task_*` (этап 8), `chat_send_message`, `disk_upload_file`, `calendar_create_event` (этап 9). Образец write-инструмента — `src/tools/crm/create-record.ts`.
+- Из 11 MVP-инструментов есть 8 (5 системных, 3 CRM, 3 задач — итого 11 с `crm_fields_get` как вспомогательным; по списку §10.1 не хватает трёх): `chat_send_message`, `disk_upload_file`, `calendar_create_event` — этап 9. Образцы write-инструментов — `src/tools/crm/create-record.ts`, `src/tools/tasks/task-create.ts`.
+- `task_get` без `include` (чек-листы/комментарии), `task_update`/`task_complete`/`task_delete` — полная версия.
 - `crm_get_record` без `include` (дела/комментарии/товары) — полная версия; `crm_search_records`, `crm_update_record` — полная версия.
 - Антивирусный сканер staged-файлов не интегрирован: `UPLOAD_SCAN_REQUIRED=true` блокирует загрузку честно (этап 12).
 - OAuth (Bitrix и MCP) — конфигурация принимает поля, но режимы `oauth` намеренно блокируются `CONFIG_INVALID` до этапов 12/13.

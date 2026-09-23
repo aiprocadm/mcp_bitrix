@@ -105,6 +105,20 @@ const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
     source: `${DOCS}/api-reference/user/user-get.html`,
   }),
 
+  // --- задачи: схема полей (S15). В документации метод пишется tasks.task.getFields;
+  //     REST Bitrix24 регистрирует имена в нижнем регистре, реестр хранит канонический lowercase.
+  D({
+    method: 'tasks.task.getfields',
+    apiVersion: 'legacy',
+    operation: 'read',
+    scope: 'task',
+    pagination: 'none',
+    supportsNativeIdempotency: false,
+    applicationContextRequired: false,
+    rawCallable: true,
+    source: `${DOCS}/api-reference/tasks/tasks-task-get-fields.html`,
+  }),
+
   // --- CRM сделки (S09) ---
   D({
     method: 'crm.deal.list',
