@@ -1,9 +1,9 @@
 {
-  "name": "crm_get_record",
-  "title": "Карточка записи CRM",
-  "description": "Карточка записи CRM (сделка, лид, контакт, компания) по ID в рамках доступных полей. Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для последующих изменений (expectedStateHash в crm_update_record). Связанные блоки (дела, комментарии, товары, реквизиты) через include появятся следующими срезами; бинарные вложения не скачиваются.",
+  "name": "crm_update_record",
+  "title": "Изменить запись CRM",
+  "description": "Изменить поля записи классического CRM (сделка, лид, контакт, компания) через crm.<entity>.update. Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (diff «было → станет»); человек подтверждает; повторный вызов с теми же параметрами и approvalId применяет изменение один раз.",
   "annotations": {
-    "readOnlyHint": true,
+    "readOnlyHint": false,
     "destructiveHint": false,
     "idempotentHint": true,
     "openWorldHint": true
@@ -28,19 +28,97 @@
         "maximum": 9007199254740991,
         "description": "ID записи"
       },
-      "select": {
-        "description": "Ограничить набор полей; по умолчанию все доступные",
-        "maxItems": 100,
-        "type": "array",
-        "items": {
+      "fields": {
+        "type": "object",
+        "propertyNames": {
           "type": "string",
-          "maxLength": 100
-        }
+          "pattern": "^[A-Z][A-Z0-9_]{0,99}$"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 20000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          ]
+        },
+        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР, пользовательские UF_CRM_*"
+      },
+      "dryRun": {
+        "default": false,
+        "description": "Только рассчитать план и проверки; ничего не записывать и не создавать подтверждение",
+        "type": "boolean"
+      },
+      "idempotencyKey": {
+        "description": "UUID, одинаковый при повторе того же намерения; обязателен, если dryRun=false",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "approvalId": {
+        "description": "operationId, подтверждённый человеком через npm run approval:review",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "expectedStateHash": {
+        "description": "Хеш состояния объекта из предыдущего чтения; при расхождении — CONFLICT",
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
       }
     },
     "required": [
       "entityType",
-      "id"
+      "id",
+      "fields",
+      "dryRun"
     ],
     "additionalProperties": false
   },
@@ -70,15 +148,33 @@
               "id": {
                 "type": "number"
               },
-              "title": {
-                "type": "string"
+              "dryRun": {
+                "type": "boolean"
               },
-              "record": {
+              "plan": {
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "validationLevel": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "changedFields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "stateHash": {
                 "type": "string"
@@ -86,10 +182,7 @@
             },
             "required": [
               "entityType",
-              "id",
-              "title",
-              "record",
-              "stateHash"
+              "id"
             ],
             "additionalProperties": false
           },

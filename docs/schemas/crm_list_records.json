@@ -1,7 +1,7 @@
 {
   "name": "crm_list_records",
   "title": "Список записей CRM",
-  "description": "Страница записей CRM (в MVP — сделки) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список сделок по условию: стадия, ответственный, даты, часть названия. Ключи фильтра — как в Bitrix24: ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {\">=DATE_CREATE\": \"2026-09-01\", \"%TITLE\": \"договор\"}. Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа.",
+  "description": "Страница записей CRM (сделки, лиды, контакты, компании) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. Ключи фильтра — как в Bitrix24: ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {\">=DATE_CREATE\": \"2026-09-01\", \"%TITLE\": \"договор\"}. Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа. Смарт-процессы (entityType=smart) появятся отдельным срезом.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -14,8 +14,13 @@
     "properties": {
       "entityType": {
         "type": "string",
-        "const": "deal",
-        "description": "Тип сущности; в MVP только deal"
+        "enum": [
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
       },
       "filter": {
         "default": {},
@@ -83,7 +88,7 @@
         }
       },
       "select": {
-        "description": "Поля в ответе; по умолчанию ID, TITLE, STAGE_ID, CATEGORY_ID, ASSIGNED_BY_ID, OPPORTUNITY, CURRENCY_ID, DATE_CREATE",
+        "description": "Поля в ответе; по умолчанию ключевые поля сущности (ID, название/имя, стадия, ответственный, даты)",
         "maxItems": 100,
         "type": "array",
         "items": {
@@ -126,7 +131,13 @@
             "properties": {
               "entityType": {
                 "type": "string",
-                "const": "deal"
+                "enum": [
+                  "deal",
+                  "lead",
+                  "contact",
+                  "company"
+                ],
+                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
               },
               "items": {
                 "type": "array",

@@ -31,10 +31,10 @@ export function asText(v: unknown): string {
   return '';
 }
 
-export function parseFieldsResult(result: unknown): DealFieldsMeta {
+export function parseFieldsResult(result: unknown, method = 'crm.deal.fields'): DealFieldsMeta {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    throw new AppError('BITRIX_UPSTREAM_ERROR', 'crm.deal.fields вернул неожиданную форму', {
-      method: 'crm.deal.fields',
+    throw new AppError('BITRIX_UPSTREAM_ERROR', `${method} вернул неожиданную форму`, {
+      method,
       apiVersion: 'legacy',
     });
   }
@@ -60,9 +60,10 @@ export function parseFieldsResult(result: unknown): DealFieldsMeta {
       ...(items ? { items } : {}),
     };
   }
-  if (!meta['ID'] || !meta['TITLE']) {
-    throw new AppError('BITRIX_UPSTREAM_ERROR', 'Схема полей сделки не содержит ID/TITLE', {
-      method: 'crm.deal.fields',
+  // У контакта нет TITLE (имя = NAME/LAST_NAME); минимальный инвариант любой схемы — поле ID.
+  if (!meta['ID']) {
+    throw new AppError('BITRIX_UPSTREAM_ERROR', `Схема полей (${method}) не содержит ID`, {
+      method,
       apiVersion: 'legacy',
     });
   }

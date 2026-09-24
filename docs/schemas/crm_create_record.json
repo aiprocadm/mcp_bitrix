@@ -1,7 +1,7 @@
 {
   "name": "crm_create_record",
   "title": "Создать запись CRM",
-  "description": "Создать запись CRM (в MVP — сделку через crm.deal.add). Поля проверяются по схеме портала (crm_fields_get): неизвестные и read-only отклоняются, обязательные должны быть заполнены. Использовать, когда пользователь явно просит создать сделку. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с operationId и планом — запись ещё не сделана; человек подтверждает план в терминале; повторный вызов с теми же параметрами и approvalId создаёт сделку ровно один раз. dryRun=true только показывает план. Могут сработать роботы и уведомления стадии.",
+  "description": "Создать запись классического CRM: сделку, лид, контакт или компанию (crm.<entity>.add). Поля проверяются по схеме портала (crm_fields_get): неизвестные и read-only отклоняются, обязательные должны быть заполнены, стадия/статус — по справочнику. Использовать, когда пользователь явно просит создать запись. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с operationId и планом — запись ещё не сделана; человек подтверждает план (CLI или панель); повторный вызов с теми же параметрами и approvalId создаёт запись ровно один раз. dryRun=true только показывает план. Могут сработать роботы и уведомления.",
   "annotations": {
     "readOnlyHint": false,
     "destructiveHint": false,
@@ -14,8 +14,13 @@
     "properties": {
       "entityType": {
         "type": "string",
-        "const": "deal",
-        "description": "Тип сущности; в MVP только deal"
+        "enum": [
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
       },
       "fields": {
         "type": "object",
@@ -78,7 +83,7 @@
             }
           ]
         },
-        "description": "Поля сделки по схеме портала: TITLE обязателен; CATEGORY_ID, STAGE_ID, ASSIGNED_BY_ID, OPPORTUNITY, CURRENCY_ID, UF_CRM_*"
+        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР, пользовательские UF_CRM_*"
       },
       "dryRun": {
         "default": false,
@@ -120,7 +125,13 @@
             "properties": {
               "entityType": {
                 "type": "string",
-                "const": "deal"
+                "enum": [
+                  "deal",
+                  "lead",
+                  "contact",
+                  "company"
+                ],
+                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
               },
               "dryRun": {
                 "type": "boolean"

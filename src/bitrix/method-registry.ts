@@ -27,6 +27,66 @@ const D = (d: MethodDescriptor): readonly [string, MethodDescriptor] => [`${d.ap
 
 const DOCS = 'https://apidocs.bitrix24.ru';
 
+/**
+ * Пять классических методов сущности CRM: fields/list/get — чтение (raw разрешён), add/update — запись.
+ * Страницы: {DOCS}/api-reference/crm/<folder>/<page>-<op>.html (каждая сверена при добавлении).
+ */
+function classicCrmEntity(
+  base: string,
+  folder: string,
+  page: string,
+): readonly (readonly [string, MethodDescriptor])[] {
+  const src = (op: string) => `${DOCS}/api-reference/crm/${folder}/${page}-${op}.html`;
+  const common = {
+    apiVersion: 'legacy' as const,
+    scope: 'crm',
+    supportsNativeIdempotency: false,
+    applicationContextRequired: false,
+  };
+  return [
+    D({
+      ...common,
+      method: `${base}.fields`,
+      operation: 'read',
+      pagination: 'none',
+      rawCallable: true,
+      source: src('fields'),
+    }),
+    D({
+      ...common,
+      method: `${base}.list`,
+      operation: 'read',
+      pagination: 'offset',
+      rawCallable: true,
+      source: src('list'),
+    }),
+    D({
+      ...common,
+      method: `${base}.get`,
+      operation: 'read',
+      pagination: 'none',
+      rawCallable: true,
+      source: src('get'),
+    }),
+    D({
+      ...common,
+      method: `${base}.add`,
+      operation: 'create',
+      pagination: 'none',
+      rawCallable: false,
+      source: src('add'),
+    }),
+    D({
+      ...common,
+      method: `${base}.update`,
+      operation: 'update',
+      pagination: 'none',
+      rawCallable: false,
+      source: src('update'),
+    }),
+  ];
+}
+
 const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
   // --- базовые / диагностика (S07) ---
   D({
@@ -185,6 +245,44 @@ const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
     applicationContextRequired: false,
     rawCallable: true,
     source: `${DOCS}/api-reference/crm/status/crm-status-list.html`,
+  }),
+  D({
+    method: 'crm.status.entity.types',
+    apiVersion: 'legacy',
+    operation: 'read',
+    scope: 'crm',
+    pagination: 'none',
+    supportsNativeIdempotency: false,
+    applicationContextRequired: false,
+    rawCallable: true,
+    source: `${DOCS}/api-reference/crm/status/crm-status-entity-types.html`,
+  }),
+  D({
+    method: 'crm.deal.update',
+    apiVersion: 'legacy',
+    operation: 'update',
+    scope: 'crm',
+    pagination: 'none',
+    supportsNativeIdempotency: false,
+    applicationContextRequired: false,
+    rawCallable: false,
+    source: `${DOCS}/api-reference/crm/deals/crm-deal-update.html`,
+  }),
+  // --- CRM лиды/контакты/компании (S09; классические методы: страницы помечены «развитие остановлено,
+  //     используйте crm.item.*» — работают и документированы; универсальный адаптер — отдельным срезом) ---
+  ...classicCrmEntity('crm.lead', 'leads', 'crm-lead'),
+  ...classicCrmEntity('crm.contact', 'contacts', 'crm-contact'),
+  ...classicCrmEntity('crm.company', 'companies', 'crm-company'),
+  D({
+    method: 'crm.duplicate.findbycomm',
+    apiVersion: 'legacy',
+    operation: 'read',
+    scope: 'crm',
+    pagination: 'none',
+    supportsNativeIdempotency: false,
+    applicationContextRequired: false,
+    rawCallable: true,
+    source: `${DOCS}/api-reference/crm/duplicates/crm-duplicate-find-by-comm.html`,
   }),
 
   // --- задачи (S15): scope `task`, методы tasks.task.* ---
