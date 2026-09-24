@@ -1,7 +1,7 @@
 {
-  "name": "crm_search_records",
-  "title": "Поиск записей CRM",
-  "description": "Найти записи CRM по части названия/имени (query), телефону (phone) или email. Использовать, когда пользователь называет клиента словами, а не ID: «найди компанию Ромашка», «есть ли контакт с телефоном…». Возвращает кандидатов с основанием совпадения — выбор среди них делает пользователь. Телефон/email ищутся среди лидов, контактов и компаний (сделки — только по названию). Запрос короче 3 символов отклоняется как слишком широкий.",
+  "name": "crm_deal_products_get",
+  "title": "Товары сделки",
+  "description": "Товарные позиции сделки: товар, цена за единицу (с учётом скидок и налогов, как хранит Bitrix24), количество, скидка, НДС, и расчётный итог по строкам рядом с суммой сделки. Использовать перед crm_deal_products_replace и когда спрашивают «что в сделке». До 50 строк на страницу, продолжение — по cursor.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,55 +12,27 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entityTypes": {
-        "default": [
-          "deal",
-          "lead",
-          "contact",
-          "company"
-        ],
-        "description": "Где искать; по умолчанию везде",
-        "minItems": 1,
-        "maxItems": 4,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "deal",
-            "lead",
-            "contact",
-            "company"
-          ],
-          "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-        }
-      },
-      "query": {
-        "description": "Часть названия сделки/лида/компании или фамилии/имени контакта",
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 100
-      },
-      "phone": {
-        "type": "string",
-        "minLength": 5,
-        "maxLength": 30,
-        "pattern": "^[+\\d][\\d\\s()-]*$"
-      },
-      "email": {
-        "type": "string",
-        "maxLength": 120,
-        "format": "email",
-        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      "dealId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID сделки"
       },
       "pageSize": {
-        "description": "Максимум кандидатов на тип сущности (по умолчанию 20)",
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
         "type": "integer",
         "minimum": 1,
         "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       }
     },
     "required": [
-      "entityTypes"
+      "dealId"
     ],
     "additionalProperties": false
   },
@@ -77,61 +49,80 @@
           "data": {
             "type": "object",
             "properties": {
-              "candidates": {
+              "dealId": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "dealOpportunity": {
+                "type": "number"
+              },
+              "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "entityType": {
-                      "type": "string",
-                      "enum": [
-                        "deal",
-                        "lead",
-                        "contact",
-                        "company"
-                      ],
-                      "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-                    },
                     "id": {
                       "type": "number"
                     },
-                    "title": {
+                    "productId": {
+                      "type": "number"
+                    },
+                    "productName": {
                       "type": "string"
                     },
-                    "matchedBy": {
-                      "type": "string",
-                      "enum": [
-                        "title",
-                        "name",
-                        "phone",
-                        "email"
-                      ]
+                    "price": {
+                      "type": "number"
                     },
-                    "record": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {}
+                    "quantity": {
+                      "type": "number"
+                    },
+                    "discountTypeId": {
+                      "type": "number"
+                    },
+                    "discountRate": {
+                      "type": "number"
+                    },
+                    "discountSum": {
+                      "type": "number"
+                    },
+                    "taxRate": {
+                      "type": "number"
+                    },
+                    "taxIncluded": {
+                      "type": "boolean"
+                    },
+                    "measureName": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "entityType",
-                    "id",
-                    "title",
-                    "matchedBy",
-                    "record"
+                    "productId",
+                    "productName",
+                    "price",
+                    "quantity",
+                    "taxIncluded"
                   ],
                   "additionalProperties": false
                 }
               },
               "returnedCount": {
                 "type": "number"
+              },
+              "pageTotal": {
+                "type": "number"
+              },
+              "stateHash": {
+                "type": "string"
               }
             },
             "required": [
-              "candidates",
-              "returnedCount"
+              "dealId",
+              "currency",
+              "items",
+              "returnedCount",
+              "pageTotal"
             ],
             "additionalProperties": false
           },

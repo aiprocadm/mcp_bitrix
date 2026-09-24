@@ -1,7 +1,7 @@
 {
-  "name": "crm_search_records",
-  "title": "Поиск записей CRM",
-  "description": "Найти записи CRM по части названия/имени (query), телефону (phone) или email. Использовать, когда пользователь называет клиента словами, а не ID: «найди компанию Ромашка», «есть ли контакт с телефоном…». Возвращает кандидатов с основанием совпадения — выбор среди них делает пользователь. Телефон/email ищутся среди лидов, контактов и компаний (сделки — только по названию). Запрос короче 3 символов отклоняется как слишком широкий.",
+  "name": "crm_stage_history",
+  "title": "История стадий записи CRM",
+  "description": "История переходов сделки или лида по стадиям: когда запись создана, через какие стадии прошла, когда закрыта, меняла ли воронку. Использовать, когда спрашивают «когда сделка перешла на стадию…», «сколько она была в работе». Даты from/to ограничивают период (ISO 8601). Одна страница до 50 переходов, продолжение — по cursor.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,55 +12,46 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entityTypes": {
-        "default": [
+      "entityType": {
+        "type": "string",
+        "enum": [
           "deal",
-          "lead",
-          "contact",
-          "company"
+          "lead"
         ],
-        "description": "Где искать; по умолчанию везде",
-        "minItems": 1,
-        "maxItems": 4,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "deal",
-            "lead",
-            "contact",
-            "company"
-          ],
-          "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-        }
+        "description": "Сделка или лид (история стадий смарт-процессов и счетов — в следующих срезах)"
       },
-      "query": {
-        "description": "Часть названия сделки/лида/компании или фамилии/имени контакта",
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 100
+      "recordId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID сделки или лида"
       },
-      "phone": {
+      "from": {
+        "description": "Начало периода (включительно)",
         "type": "string",
-        "minLength": 5,
-        "maxLength": 30,
-        "pattern": "^[+\\d][\\d\\s()-]*$"
+        "maxLength": 40
       },
-      "email": {
+      "to": {
+        "description": "Конец периода (включительно)",
         "type": "string",
-        "maxLength": 120,
-        "format": "email",
-        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+        "maxLength": 40
       },
       "pageSize": {
-        "description": "Максимум кандидатов на тип сущности (по умолчанию 20)",
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
         "type": "integer",
         "minimum": 1,
         "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       }
     },
     "required": [
-      "entityTypes"
+      "entityType",
+      "recordId"
     ],
     "additionalProperties": false
   },
@@ -77,50 +68,61 @@
           "data": {
             "type": "object",
             "properties": {
-              "candidates": {
+              "entityType": {
+                "type": "string",
+                "enum": [
+                  "deal",
+                  "lead"
+                ],
+                "description": "Сделка или лид (история стадий смарт-процессов и счетов — в следующих срезах)"
+              },
+              "recordId": {
+                "type": "number"
+              },
+              "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "entityType": {
-                      "type": "string",
-                      "enum": [
-                        "deal",
-                        "lead",
-                        "contact",
-                        "company"
-                      ],
-                      "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-                    },
                     "id": {
                       "type": "number"
                     },
-                    "title": {
-                      "type": "string"
-                    },
-                    "matchedBy": {
+                    "kind": {
                       "type": "string",
                       "enum": [
-                        "title",
-                        "name",
-                        "phone",
-                        "email"
+                        "created",
+                        "intermediate",
+                        "final",
+                        "category_change",
+                        "other"
                       ]
                     },
-                    "record": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {}
+                    "createdTime": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "number"
+                    },
+                    "stageId": {
+                      "type": "string"
+                    },
+                    "stageName": {
+                      "type": "string"
+                    },
+                    "semantic": {
+                      "type": "string",
+                      "enum": [
+                        "P",
+                        "S",
+                        "F"
+                      ]
                     }
                   },
                   "required": [
-                    "entityType",
                     "id",
-                    "title",
-                    "matchedBy",
-                    "record"
+                    "kind",
+                    "createdTime",
+                    "stageId"
                   ],
                   "additionalProperties": false
                 }
@@ -130,7 +132,9 @@
               }
             },
             "required": [
-              "candidates",
+              "entityType",
+              "recordId",
+              "items",
               "returnedCount"
             ],
             "additionalProperties": false
