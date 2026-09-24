@@ -4,13 +4,13 @@
 
 ## Текущее положение
 
-|                       |                                                                                                                                                                                                                             |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Дата обновления       | 2026-09-23 (срез 6)                                                                                                                                                                                                         |
-| Последний влитый срез | срез 5, PR #5 (этапы 1–9); срез 6 (этап 10) — в PR                                                                                                                                                                          |
-| Текущий этап          | **11. README и инструкции**: Windows/Desktop проверка по тексту, `docs/claude-desktop.md`, `docs/operations.md` (backup/restore ключа и БД, ротация вебхука), `docs/deployment.md` (Compose), troubleshooting по live-smoke |
-| Следующие             | 12 (сервер и ChatGPT), 13 (полная версия §11), 14 (destructive)                                                                                                                                                             |
-| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                                                                                                                    |
+|                       |                                                                                                                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Дата обновления       | 2026-09-24 (срез 7)                                                                                                                                                                                                                                   |
+| Последний влитый срез | срез 6, PR #6 (этапы 1–10); срез 7 (этап 11) — в PR                                                                                                                                                                                                   |
+| Текущий этап          | **12. Сервер и ChatGPT**: HTTP production (`MCP_AUTH_MODE=oauth`, JWT/JWKS по `MCP_AUTH_*`, allowlist субъектов, роли), reverse proxy, панель подтверждений /admin, web-upload, сканер staged-файлов, remote smoke; ChatGPT — только после публикации |
+| Следующие             | 13 (полная версия §11), 14 (destructive)                                                                                                                                                                                                              |
+| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                                                                                                                                              |
 
 ## Этапы (ТЗ §22)
 
@@ -26,10 +26,18 @@
 | 8   | MVP task tools             | ✅ 23.09     | `src/tools/tasks/`: `task_create`, `task_get`, `task_list` (legacy `tasks.task.*`, схема из `tasks.task.getfields`)                       |
 | 9   | MVP chat/calendar/disk     | ✅ 23.09     | `src/tools/chat/send-message.ts`, `src/tools/calendar/create-event.ts` (+ `time.ts`), `src/tools/disk/upload-file.ts`                     |
 | 10  | Тесты (сводно)             | ✅ 23.09     | `docs/acceptance-report.md` — полная таблица T01–T48 и §20.1–20.3; `npm run test:live` (`src/live/scenario.ts`); T23, T43, HTTP-курсор    |
-| 11  | README и инструкции        | ⏳ следующий | есть: README, setup Linux/Windows, webhook, claude-code, troubleshooting; нет: claude-desktop, operations (backup), deployment, chatgpt   |
-| 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                                |
+| 11  | README и инструкции        | ✅ 24.09     | все документы §12: + `claude-desktop`, `chatgpt`, `deployment`, `operations`, `bitrix-oauth`; `npm run backup` (T45); compose усилен      |
+| 12  | Сервер и ChatGPT           | ⏳ следующий | HTTP production + OAuth MCP, панель, web-upload, сканер, remote smoke; ChatGPT blocked до публикации                                      |
 | 13  | Полная версия              | —            | §11 ТЗ                                                                                                                                    |
 | 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                                     |
+
+## Что именно сделано (срез 7, этап 11)
+
+- Резервная копия (§8.6, §17.7, T45): `src/ops/backup.ts` + `npm run backup` (`src/cli/backup.ts`). Снимок SQLite через `VACUUM INTO` (согласован независимо от WAL) + три файла политик в одном JSON, зашифрованном AES-256-GCM ключом из `SECRETS_KEY_FILE` (AAD `bitrix24-mcp-backup:1`, файл `0600`, поверх существующего не пишем). Ключ и `.env` в копию НЕ входят намеренно. `--restore <файл> --to <новая папка>`: расшифровка, sha256 базы, запись только в новую папку, база открывается read-only и считаются незавершённые операции (prepared/approved/executing/unknown) — они не исполняются. Тесты `tests/unit/backup.test.ts` (3): roundtrip с pending операцией, чужой ключ/мусор/существующая папка/повтор `--out` — отказ, без базы — ошибка. CLI прогнан вживую на mock-профиле.
+- Документы §12 все на месте: `docs/claude-desktop.md` (§18.1), `docs/chatgpt.md` (§18.4–18.5, честно `blocked` до этапа 12 + алгоритм проверки в аккаунте + таблица обходных вариантов), `docs/deployment.md` (§17.6, только loopback + SSH-туннель до этапа 12, заготовка nginx), `docs/operations.md` (копии/восстановление, обновление/откат, ротация вебхука и реакция на утечку по §17.7, retention, мониторинг), `docs/bitrix-oauth.md` (§6.2 — не реализовано, план этапа 13). README: команда `backup`, ссылки на новые документы; `docs/troubleshooting.md`: +5 строк (test:live, backup, compose).
+- `compose.yaml` усилен: `user: mcp`, `read_only`, `tmpfs /tmp`, `cap_drop ALL`, `no-new-privileges`, healthcheck без curl, ротация логов. **Найденный дефект**: прежний профиль задавал `MCP_HOST=0.0.0.0` при `MCP_AUTH_MODE=local` — конфигурация это отвергает (`CONFIG_INVALID`), контейнер бы не стартовал. Решение до этапа 12: `network_mode: host` + `MCP_HOST=127.0.0.1`, порт наружу не публикуется, владелец — через SSH-туннель.
+- Живая проверка compose на этом сервере (Docker есть): найдены и починены ещё два дефекта — (а) `ENTRYPOINT ["node","dist/index.js"]` превращал `docker compose run … node dist/cli/setup.js` в запуск сервера с чужими аргументами (`CONFIG_INVALID`/`INTERNAL_ERROR`), теперь только полный `CMD`; (б) рабочие политики искались рядом с `.env` в папке `config`, смонтированной только для чтения, — теперь `*_POLICY_FILE` указывают в том `mcp-data`, а `setup` берёт примеры из `/app/policies`, если рядом с `.env` их нет. Порядок в инструкции исправлен: `setup` и `doctor` одноразовым контейнером ДО `up -d` (без ключа сервер не стартует и уходит в перезапуск). `MCP_PORT` в compose настраиваемый (3000 на хосте бывает занят). Не проверено: реальный портал из контейнера, проход документации новичком.
+- Тесты: +3 (180).
 
 ## Что именно сделано (срез 6, этап 10)
 
@@ -114,6 +122,7 @@
 - Прямая проверка «CLI не принимает ввод через pipe» из bash невозможна (guard) — она живёт тестом `tests/security/approval-cli-no-tty.test.ts`, который сам запускает CLI.
 - `data/` не в git: тесты, запускающие настоящий процесс, обязаны сами создавать ключ (`ensureMasterKey(..., {create:true})`), иначе на чистой копии `CONFIG_INVALID`.
 - Редактор секретов применяется и к выводу CLI (`out()`): слишком широкий шаблон «телефона» ломал хеши и даты. Любой новый шаблон проверять на sha256/ISO-дате/UUID.
+- `MCP_HOST=0.0.0.0` при `MCP_AUTH_MODE=local` отвергается конфигурацией — compose-профиль до этапа 12 живёт на `network_mode: host` с `127.0.0.1`; проверять `docker compose config` и реальный старт, а не только YAML. Docker на сервере доступен без sudo — compose гонять вживую (`MCP_PORT=3123`, порт 3000 хоста занят), одноразовые команды — `docker compose run --rm <service> node dist/cli/<cli>.js`, ENTRYPOINT в Dockerfile не ставить.
 - После squash-слияния PR ветка worktree расходится с `main` — новый срез начинать в новом worktree от `origin/main`, старый не трогать из-под guard.
 
 ## Открытые вопросы владельцу (не блокируют код)

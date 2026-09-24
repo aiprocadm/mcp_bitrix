@@ -5,6 +5,7 @@
  */
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describeConfig } from '../config/env.js';
 import { loadPolicies } from '../config/policy.js';
 import { ensureMasterKey } from '../security/crypto.js';
@@ -29,9 +30,16 @@ function main(): void {
     [config.policy.accessPolicyFile, 'access.example.json'],
     [config.policy.outputPolicyFile, 'output.example.json'],
   ];
-  const examplesDir = path.resolve(config.baseDir, 'policies');
+  // Примеры ищем рядом с .env, а если их там нет (например, в контейнере config смонтирован отдельно) —
+  // в папке policies самой программы (src/cli → ../../policies, dist/cli → ../../policies).
+  const examplesDirs = [
+    path.resolve(config.baseDir, 'policies'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'policies'),
+  ];
   for (const [target, example] of policyPairs) {
-    const src = path.join(examplesDir, example);
+    const src =
+      examplesDirs.map((dir) => path.join(dir, example)).find((p) => existsSync(p)) ??
+      path.join(examplesDirs[0] ?? '', example);
     if (existsSync(target)) {
       checks.push({ name: path.basename(target), status: 'ok', detail: 'уже существует, не тронут' });
       continue;
