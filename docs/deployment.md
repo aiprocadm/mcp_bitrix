@@ -1,10 +1,11 @@
 # Развёртывание на VPS (ТЗ §17.6)
 
-Состояние на 2026-09-24 (этап 12, срез 8): сервер умеет работать за HTTPS reverse proxy с OAuth-защитой MCP
-(`MCP_AUTH_MODE=oauth`, спецификация MCP Authorization — источник S25 в ТЗ). Проверено на mock-конфиге
-и тестовом издателе токенов; **с реальным доменом, реальным authorization server и реальным порталом не проверялось**
-(`not-run`, см. `docs/acceptance-report.md`). Панель подтверждений `/admin`, web-upload и сканер файлов — следующий срез:
-до них записи в удалённом режиме подтверждаются только локальной CLI `approval:review` на самом сервере.
+Состояние на 2026-09-24 (этап 12, срезы 8–9): сервер умеет работать за HTTPS reverse proxy с OAuth-защитой MCP
+(`MCP_AUTH_MODE=oauth`, спецификация MCP Authorization — источник S25 в ТЗ), панелью владельца `/admin`
+(подтверждения и web-upload, `ADMIN_PANEL_ENABLED=true`) и антивирусным сканером staged-файлов (ClamAV,
+`UPLOAD_SCAN_REQUIRED=true`). Проверено на mock-конфиге, тестовом издателе токенов и фальшивом clamd;
+**с реальным доменом, реальным authorization server, реальным ClamAV и реальным порталом не проверялось**
+(`not-run`, см. `docs/acceptance-report.md`).
 
 ## Как устроена защита (что вы получаете)
 
@@ -78,8 +79,20 @@ curl -s https://mcp.example.com/.well-known/oauth-protected-resource/mcp        
 MCP_SMOKE_TOKEN='<access token>' npm run mcp:smoke -- --transport http --url https://mcp.example.com/mcp
 ```
 
-7. Подключите клиента: `docs/claude-code.md` (раздел «Удалённое подключение»), `docs/chatgpt.md`.
-   Сначала read-only, затем одно подтверждённое тестовое изменение (`docs/operations.md`).
+7. Панель владельца и сканер (нужны для записей и файлов из удалённых клиентов):
+
+```bash
+# ClamAV рядом с сервером (порт 3310 только на loopback хоста); в config/.env: UPLOAD_SCAN_REQUIRED=true, UPLOAD_SCANNER_URL=clamd://127.0.0.1:3310
+docker run -d --name clamav --restart unless-stopped --network host clamav/clamav:stable
+# в config/.env: ADMIN_PANEL_ENABLED=true; пользователь панели (пароль вводится скрыто, в терминале):
+docker compose run --rm -it bitrix24-mcp node dist/cli/admin-user.js --config /app/config/.env --name boss --principal owner
+docker compose restart bitrix24-mcp && docker compose run --rm bitrix24-mcp node dist/cli/doctor.js --config /app/config/.env
+```
+
+Затем `https://mcp.example.com/admin/login` (nginx-пример уже проксирует `/admin`). Подробнее — `docs/operations.md`.
+
+8. Подключите клиента: `docs/claude-code.md` (раздел «Удалённое подключение»), `docs/chatgpt.md`.
+   Сначала read-only, затем одно подтверждённое тестовое изменение через панель (`docs/operations.md`).
 
 ## Что даёт `compose.yaml`
 
@@ -95,8 +108,10 @@ MCP_SMOKE_TOKEN='<access token>' npm run mcp:smoke -- --transport http --url htt
 - Проверено 2026-09-24 на Linux-хосте с Docker: образ, `setup`/`doctor` одноразовым контейнером, старт на host-сети,
   `healthy`, `initialize` через `/mcp` (режим `local`). OAuth-режим — автотестами с локальным издателем (JWKS по HTTP
   на loopback), включая 401/403, привязку сессии, Origin и метаданные (`tests/security/mcp-oauth.test.ts`).
+- Панель `/admin` и сканер — автотестами (`tests/security/admin-panel.test.ts`, `tests/unit/scanner.test.ts` с фальшивым
+  clamd) и живой проверкой на loopback: вход, план оператора, отказ без CSRF, подтверждение словом, web-upload → fileToken.
 - Не проверено: реальный домен и TLS, реальный AS (Keycloak и др.), регистрация клиента Claude Code/ChatGPT,
-  реальный портал. Эти пункты в отчёте приёмки — `not-run`.
+  реальный ClamAV, реальный портал. Эти пункты в отчёте приёмки — `not-run`.
 
 ## Резервные копии на VPS
 

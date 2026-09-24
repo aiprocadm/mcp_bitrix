@@ -15,8 +15,8 @@
 - Публикация по `docs/deployment.md` (nginx, `examples/remote.env.example`), AS с регистрацией клиента (Client ID
   Metadata Documents или Dynamic Client Registration — так подключается ChatGPT), PKCE, `aud` = адрес сервера,
   `sub` пользователя в `MCP_AUTH_ALLOWED_SUBJECTS`.
-- Для записей из ChatGPT: web-панель подтверждений и web-upload со сканером (следующий срез этапа 12); до них запись
-  подтверждается только CLI на сервере.
+- Для записей из ChatGPT: панель владельца `/admin` (`ADMIN_PANEL_ENABLED=true`, `docs/operations.md`) — там
+  подтверждаются планы и готовятся файлы (`fileToken`); при `UPLOAD_SCAN_REQUIRED=true` нужен ClamAV.
 - Реальное подключение в аккаунте заказчика: минимум один вызов чтения, затем одна подтверждённая запись.
   Работа Claude Code не считается доказательством работы ChatGPT.
 

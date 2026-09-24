@@ -14,7 +14,9 @@ import { loadPolicies, type Policies } from '../config/policy.js';
 import { AppError } from '../errors/app-error.js';
 import { AuditLog } from '../logging/audit.js';
 import { createLogger, type AppLogger } from '../logging/logger.js';
+import { createScanner, type FileScanner } from '../files/scanner.js';
 import { FileStaging } from '../files/staging.js';
+import { AdminAccounts } from '../http/admin-auth.js';
 import { InboundLimiter } from '../security/inbound-limiter.js';
 import { ApprovalService } from '../security/approval-service.js';
 import { ensureMasterKey, SecretBox } from '../security/crypto.js';
@@ -41,6 +43,8 @@ export interface AppContainer {
   readonly approvals: ApprovalService;
   readonly mutations: MutationExecutor;
   readonly files: FileStaging;
+  /** Учётные записи и сессии панели /admin. */
+  readonly admin: AdminAccounts;
   readonly outputPolicy: OutputPolicyEngine;
   readonly principal: Principal;
   /** Лимит входящих read-вызовов на оператора (ТЗ §8.6). */
@@ -56,6 +60,8 @@ export interface CreateAppOptions {
   inMemoryDatabase?: boolean;
   /** Для тестов: ключ шифрования вместо файла. */
   masterKey?: Buffer;
+  /** Для тестов: сканер файлов вместо clamd по UPLOAD_SCANNER_URL. */
+  scanner?: FileScanner;
 }
 
 export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppContainer {
@@ -131,10 +137,13 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
       maxInlineFileBytes: config.files.maxInlineFileBytes,
       ttlSeconds: config.files.uploadTtlSeconds,
       scanRequired: config.files.scanRequired,
+      scanner: opts.scanner ?? createScanner(config.files.scannerUrl),
     },
     logger,
   );
   files.cleanupExpired();
+  const admin = new AdminAccounts(db, (id) => policies.access.principals[id]?.role);
+  admin.cleanupExpired();
 
   const tools = allTools().filter((t) => config.policy.enabledModules.has(t.module));
 
@@ -154,6 +163,7 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
     approvals,
     mutations,
     files,
+    admin,
     outputPolicy,
     principal,
     inboundLimiter: new InboundLimiter(config.server.inboundReadPerMinute),

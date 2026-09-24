@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { FileScanner, ScanVerdict } from '../../src/files/scanner.js';
 import { FileStaging } from '../../src/files/staging.js';
 import { detectMime, sanitizeFileName } from '../../src/files/validation.js';
 import { createSilentLogger } from '../../src/logging/logger.js';
@@ -12,9 +13,18 @@ let root: string;
 let staging: FileStaging;
 let db: Database;
 
+function fakeScanner(verdict: ScanVerdict | Error): FileScanner {
+  return {
+    name: 'fake',
+    scan: () => (verdict instanceof Error ? Promise.reject(verdict) : Promise.resolve(verdict)),
+    ping: () => Promise.resolve(),
+  };
+}
+
 function make(
   opts: Partial<{
     scanRequired: boolean;
+    scanner: FileScanner;
     maxUploadBytes: number;
     maxInlineFileBytes: number;
     ttlSeconds: number;
@@ -30,10 +40,14 @@ function make(
       maxInlineFileBytes: opts.maxInlineFileBytes ?? 256 * 1024,
       ttlSeconds: opts.ttlSeconds ?? 3600,
       scanRequired: opts.scanRequired ?? false,
+      scanner: opts.scanner,
     },
     createSilentLogger(),
   );
 }
+
+const b64 = (s: string) => Buffer.from(s).toString('base64');
+const manifests = () => db.get<{ n: number }>('SELECT COUNT(*) AS n FROM file_manifests')?.n;
 
 beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), 'mcp-files-'));
@@ -53,61 +67,94 @@ afterEach(() => {
 });
 
 describe('staging файлов', () => {
-  it('файл из UPLOAD_ROOT → манифест с sha256, копия в staging, путь модели не отдаётся', () => {
-    const m = staging.stageFromPath(path.join(root, 'inbox', 'mcp-test.txt'), 'owner');
+  it('файл из UPLOAD_ROOT → манифест с sha256, копия в staging, путь модели не отдаётся', async () => {
+    const m = await staging.stageFromPath(path.join(root, 'inbox', 'mcp-test.txt'), 'owner');
     expect(m.originalName).toBe('mcp-test.txt');
     expect(m.mime).toBe('text/plain');
     expect(m.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(m.scanStatus).toBe('skipped');
     expect(m.stagingPath.startsWith(path.join(root, 'staging'))).toBe(true);
     const resolved = staging.resolve(m.token, 'owner');
     expect(resolved.sha256).toBe(m.sha256);
     expect(staging.readVerified(resolved).toString()).toBe('привет, Bitrix\n');
+    expect(staging.listOwn('owner')).toHaveLength(1);
+    expect(staging.listOwn('owner')[0]).not.toHaveProperty('stagingPath');
   });
 
-  it('T25: traversal, файл вне root, симлинк, .env, относительный путь — отказ без чтения секрета', () => {
+  it('T25: traversal, файл вне root, симлинк, .env, относительный путь — отказ без чтения секрета', async () => {
     const inbox = path.join(root, 'inbox');
-    expect(() => staging.stageFromPath(path.join(inbox, '..', 'outside', 'secret.txt'), 'owner')).toThrow(
+    await expect(
+      staging.stageFromPath(path.join(inbox, '..', 'outside', 'secret.txt'), 'owner'),
+    ).rejects.toThrow(/UPLOAD_ROOT/);
+    await expect(staging.stageFromPath(path.join(root, 'outside', '.env'), 'owner')).rejects.toThrow(
       /UPLOAD_ROOT/,
     );
-    expect(() => staging.stageFromPath(path.join(root, 'outside', '.env'), 'owner')).toThrow(/UPLOAD_ROOT/);
     symlinkSync(path.join(root, 'outside', 'secret.txt'), path.join(inbox, 'link.txt'));
-    expect(() => staging.stageFromPath(path.join(inbox, 'link.txt'), 'owner')).toThrow(/UPLOAD_ROOT|ссылки/);
+    await expect(staging.stageFromPath(path.join(inbox, 'link.txt'), 'owner')).rejects.toThrow(
+      /UPLOAD_ROOT|ссылки/,
+    );
     symlinkSync(path.join(inbox, 'mcp-test.txt'), path.join(inbox, 'inner-link.txt'));
-    expect(() => staging.stageFromPath(path.join(inbox, 'inner-link.txt'), 'owner')).toThrow(/ссылки/);
+    await expect(staging.stageFromPath(path.join(inbox, 'inner-link.txt'), 'owner')).rejects.toThrow(
+      /ссылки/,
+    );
     writeFileSync(path.join(inbox, '.env'), 'X=1');
-    expect(() => staging.stageFromPath(path.join(inbox, '.env'), 'owner')).toThrow(/запрещены|allowlist/);
-    expect(() => staging.stageFromPath('inbox/mcp-test.txt', 'owner')).toThrow(/абсолютный/);
-    expect(db.get('SELECT COUNT(*) AS n FROM file_manifests')).toEqual({ n: 0 });
+    await expect(staging.stageFromPath(path.join(inbox, '.env'), 'owner')).rejects.toThrow(
+      /запрещены|allowlist/,
+    );
+    await expect(staging.stageFromPath('inbox/mcp-test.txt', 'owner')).rejects.toThrow(/абсолютный/);
+    expect(manifests()).toBe(0);
   });
 
-  it('T26: подмена staged-файла после подготовки → хеш не совпал, загрузка отменена', () => {
-    const m = staging.stageFromPath(path.join(root, 'inbox', 'mcp-test.txt'), 'owner');
+  it('T26: подмена staged-файла после подготовки → хеш не совпал, загрузка отменена', async () => {
+    const m = await staging.stageFromPath(path.join(root, 'inbox', 'mcp-test.txt'), 'owner');
     writeFileSync(m.stagingPath, 'подменённый текст\n');
     expect(() => staging.readVerified(staging.resolve(m.token, 'owner'))).toThrow(/изменилось/);
   });
 
-  it('T27: невалидный base64, превышение размера, сканер недоступен — понятные ошибки, без мусора в staging', () => {
-    expect(() => staging.stageInline('%%%not-base64%%%', 'a.txt', 'owner')).toThrow(/base64/);
+  it('T27: невалидный base64, превышение размера — понятные ошибки, без мусора в staging', async () => {
+    await expect(staging.stageInline('%%%not-base64%%%', 'a.txt', 'owner')).rejects.toThrow(/base64/);
     make({ maxInlineFileBytes: 10 });
-    expect(() =>
-      staging.stageInline(
-        Buffer.from('очень длинный текст, больше десяти байт').toString('base64'),
-        'a.txt',
-        'owner',
-      ),
-    ).toThrow(/превышает/);
-    make({ scanRequired: true });
-    expect(() => staging.stageInline(Buffer.from('ok').toString('base64'), 'a.txt', 'owner')).toThrow(
-      /сканер/,
-    );
-    expect(db.get('SELECT COUNT(*) AS n FROM file_manifests')).toEqual({ n: 0 });
+    await expect(
+      staging.stageInline(b64('очень длинный текст, больше десяти байт'), 'a.txt', 'owner'),
+    ).rejects.toThrow(/превышает/);
+    expect(manifests()).toBe(0);
   });
 
-  it('чужой principal и истёкший TTL не видят токен', () => {
-    const m = staging.stageInline(Buffer.from('ok').toString('base64'), 'note.md', 'owner');
+  it('T27: сканер обязателен — не настроен / недоступен → блокировка без сохранения; infected → отказ; clean → сохранён', async () => {
+    make({ scanRequired: true });
+    await expect(staging.stageInline(b64('ok'), 'a.txt', 'owner')).rejects.toMatchObject({
+      code: 'FEATURE_UNAVAILABLE',
+    });
+    make({ scanRequired: true, scanner: fakeScanner(new Error('ECONNREFUSED')) });
+    await expect(staging.stageInline(b64('ok'), 'a.txt', 'owner')).rejects.toThrow(/недоступен/);
+    make({
+      scanRequired: true,
+      scanner: fakeScanner({ status: 'infected', signature: 'Eicar-Test-Signature' }),
+    });
+    await expect(staging.stageUpload(Buffer.from('X5O!'), 'eicar.txt', 'owner')).rejects.toThrow(
+      /Eicar-Test-Signature/,
+    );
+    expect(manifests()).toBe(0);
+    expect(staging.listOwn('owner')).toEqual([]);
+    make({ scanRequired: true, scanner: fakeScanner({ status: 'clean' }) });
+    const m = await staging.stageUpload(Buffer.from('чистый файл'), 'clean.txt', 'owner');
+    expect(m.scanStatus).toBe('clean');
+    expect(staging.readVerified(staging.resolve(m.token, 'owner')).toString()).toBe('чистый файл');
+    // Манифест «skipped» при обязательном сканере не отправляется (защита от смены конфигурации после staging)
+    expect(() => staging.readVerified({ ...m, scanStatus: 'skipped' })).toThrow(/антивирусную/);
+  });
+
+  it('web-upload: пустой файл и чужое расширение — отказ', async () => {
+    await expect(staging.stageUpload(Buffer.alloc(0), 'a.txt', 'owner')).rejects.toThrow(/Пустой/);
+    await expect(staging.stageUpload(Buffer.from('MZ'), 'a.exe', 'owner')).rejects.toThrow(/allowlist/);
+  });
+
+  it('чужой principal и истёкший TTL не видят токен', async () => {
+    const m = await staging.stageInline(b64('ok'), 'note.md', 'owner');
     expect(() => staging.resolve(m.token, 'intruder')).toThrow(/не найден/);
+    expect(staging.listOwn('intruder')).toEqual([]);
     make({ ttlSeconds: -1 });
-    const m2 = staging.stageInline(Buffer.from('ok').toString('base64'), 'note.md', 'owner');
+    const m2 = await staging.stageInline(b64('ok'), 'note.md', 'owner');
     expect(() => staging.resolve(m2.token, 'owner')).toThrow(/не найден/);
     expect(staging.cleanupExpired()).toBe(0);
   });

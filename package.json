@@ -32,11 +32,13 @@
     "approval:review": "tsx src/cli/approval-review.ts",
     "file:stage": "tsx src/cli/file-stage.ts",
     "backup": "tsx src/cli/backup.ts",
+    "admin:user": "tsx src/cli/admin-user.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@fastify/multipart": "10.1.2",
     "@modelcontextprotocol/fastify": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",

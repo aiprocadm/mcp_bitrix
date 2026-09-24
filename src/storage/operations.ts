@@ -125,6 +125,23 @@ export class OperationsStore {
       .map(toView);
   }
 
+  /** Все ожидающие решения операции портала — для панели владельца (любой principal). */
+  listPendingAll(portalKey: string): (OperationView & { principalId: string })[] {
+    return this.db
+      .all<OperationRow>(
+        "SELECT * FROM operations WHERE portal_key = ? AND status IN ('prepared','approved') AND expires_at >= ? ORDER BY created_at",
+        portalKey,
+        now(),
+      )
+      .map((r) => ({ ...toView(r), principalId: r.principal_id }));
+  }
+
+  /** Строка операции по id в пределах портала (панель): без привязки к principal. */
+  getForPortal(operationId: string, portalKey: string): OperationRow | undefined {
+    const row = this.get(operationId);
+    return row?.portal_key === portalKey ? row : undefined;
+  }
+
   createPrepared(op: NewOperation): void {
     this.db.run(
       `INSERT INTO operations (id, principal_id, portal_key, tool, operation_kind, status, canonical_args_hash, target,

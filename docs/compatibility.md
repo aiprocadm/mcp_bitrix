@@ -9,9 +9,10 @@
 | @modelcontextprotocol/server, /node, /fastify, /client | 2.0.0                            | `initialize → tools/list → tools/call` через `Client` по InMemory, stdio и Streamable HTTP |
 | Спецификация MCP                                       | 2026-07-28 (SDK v2)              | заявлено README SDK; клиент SDK договаривается о версии сам                                |
 | Zod                                                    | 4.6.5                            | `z.toJSONSchema` для экспорта схем                                                         |
+| @fastify/multipart                                     | 10.1.2                           | web-upload панели `/admin/uploads` (один файл, лимит `MAX_UPLOAD_BYTES`)                   |
 | Fastify                                                | 5.12.5                           | `/healthz`, `/readyz`, `/mcp` в тестах                                                     |
 | TypeScript                                             | 5.9.3                            | `tsc --noEmit`, сборка `dist/`                                                             |
-| Vitest                                                 | 5.0.1                            | 195 тестов                                                                                 |
+| Vitest                                                 | 5.0.1                            | 206 тестов                                                                                 |
 | SQLite                                                 | встроенный `node:sqlite` Node 24 | миграции, WAL, транзакции в тестах                                                         |
 
 ## Клиенты MCP

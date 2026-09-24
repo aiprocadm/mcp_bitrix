@@ -46,6 +46,19 @@ server {
         proxy_set_header Host $host;
     }
 
+    # Панель владельца (ADMIN_PANEL_ENABLED=true): формы и web-upload до MAX_UPLOAD_BYTES (10 MiB) + запас.
+    # Host/Origin передаются без изменений — сервер сверяет их сам (CSRF). Доступ можно сузить: allow <ваш IP>; deny all;
+    location ^~ /admin {
+        client_max_body_size 12m;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Origin $http_origin;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_request_buffering off;
+    }
+
     # Только процесс жив; /readyz наружу не публикуется (ТЗ §4.5) — проверяйте его с самого сервера.
     location = /healthz {
         proxy_pass http://127.0.0.1:3000/healthz;

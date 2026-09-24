@@ -1,7 +1,9 @@
 /**
- * Staging файлов (ТЗ §8.5): человек кладёт файл в UPLOAD_ROOT и получает непрозрачный fileToken;
- * либо инструмент принимает маленький base64. Файл копируется в закрытый STAGING_DIR,
- * фиксируются SHA-256/размер/имя/MIME/TTL; перед отправкой хеш сверяется заново (T26).
+ * Staging файлов (ТЗ §8.5): человек кладёт файл в UPLOAD_ROOT (CLI file:stage) или загружает через
+ * панель /admin/uploads и получает непрозрачный fileToken; либо инструмент принимает маленький base64.
+ * Файл копируется в закрытый STAGING_DIR, фиксируются SHA-256/размер/имя/MIME/TTL/вердикт сканера;
+ * перед отправкой хеш сверяется заново (T26). При UPLOAD_SCAN_REQUIRED=true файл сохраняется только
+ * после вердикта «clean»; сканер недоступен — загрузка заблокирована (T27), временных данных не остаётся.
  * Произвольные пути сервера и URL для скачивания не принимаются.
  */
 import { createHash, randomBytes } from 'node:crypto';
@@ -19,7 +21,10 @@ import path from 'node:path';
 import { AppError } from '../errors/app-error.js';
 import type { AppLogger } from '../logging/logger.js';
 import type { Database } from '../storage/database.js';
+import { ScannerUnavailableError, type FileScanner } from './scanner.js';
 import { assertSize, detectMime, extensionOf, sanitizeFileName } from './validation.js';
+
+export type ScanStatus = 'clean' | 'skipped';
 
 export interface FileManifest {
   token: string;
@@ -31,6 +36,7 @@ export interface FileManifest {
   stagingPath: string;
   createdAt: string;
   expiresAt: string;
+  scanStatus: ScanStatus;
 }
 
 interface ManifestRow {
@@ -43,6 +49,7 @@ interface ManifestRow {
   staging_path: string;
   created_at: string;
   expires_at: string;
+  scan_status: ScanStatus;
 }
 
 export interface FileStagingOptions {
@@ -52,6 +59,34 @@ export interface FileStagingOptions {
   maxInlineFileBytes: number;
   ttlSeconds: number;
   scanRequired: boolean;
+  scanner?: FileScanner | undefined;
+}
+
+/** Сводка для панели/CLI: без пути в staging. */
+export interface StagedFileInfo {
+  token: string;
+  originalName: string;
+  size: number;
+  mime: string;
+  sha256: string;
+  createdAt: string;
+  expiresAt: string;
+  scanStatus: ScanStatus;
+}
+
+function toManifest(row: ManifestRow): FileManifest {
+  return {
+    token: row.token,
+    principalId: row.principal_id,
+    sha256: row.sha256,
+    size: row.size,
+    originalName: row.original_name,
+    mime: row.mime,
+    stagingPath: row.staging_path,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    scanStatus: row.scan_status,
+  };
 }
 
 export class FileStaging {
@@ -62,7 +97,7 @@ export class FileStaging {
   ) {}
 
   /** CLI file:stage: только внутри UPLOAD_ROOT, без симлинков и traversal, с проверкой до чтения. */
-  stageFromPath(inputPath: string, principalId: string): FileManifest {
+  async stageFromPath(inputPath: string, principalId: string): Promise<FileManifest> {
     if (!path.isAbsolute(inputPath)) {
       throw new AppError('UNSAFE_FILE', 'Укажите абсолютный путь к файлу внутри UPLOAD_ROOT', {
         field: 'path',
@@ -95,7 +130,7 @@ export class FileStaging {
   }
 
   /** Inline base64 для маленьких тестовых файлов (лимит MAX_INLINE_FILE_BYTES по декодированным байтам). */
-  stageInline(base64: string, fileName: string, principalId: string): FileManifest {
+  async stageInline(base64: string, fileName: string, principalId: string): Promise<FileManifest> {
     const name = sanitizeFileName(fileName);
     const ext = extensionOf(name);
     if (!/^[A-Za-z0-9+/=\s]+$/.test(base64)) {
@@ -112,19 +147,23 @@ export class FileStaging {
     return this.stageBuffer(buf, name, ext, principalId);
   }
 
-  private stageBuffer(buf: Buffer, name: string, ext: string, principalId: string): FileManifest {
+  /** Web-upload из панели (ТЗ §4.5 /admin/uploads): те же проверки, лимит MAX_UPLOAD_BYTES. */
+  async stageUpload(buf: Buffer, fileName: string, principalId: string): Promise<FileManifest> {
+    const name = sanitizeFileName(fileName);
+    const ext = extensionOf(name);
+    if (buf.length === 0) throw new AppError('UNSAFE_FILE', 'Пустой файл', { field: 'file' });
+    assertSize(buf.length, this.opts.maxUploadBytes, name);
+    return this.stageBuffer(buf, name, ext, principalId);
+  }
+
+  private async stageBuffer(
+    buf: Buffer,
+    name: string,
+    ext: string,
+    principalId: string,
+  ): Promise<FileManifest> {
     const mime = detectMime(buf, ext);
-    if (this.opts.scanRequired) {
-      // Сканер подключается на удалённом этапе; пока он недоступен — загрузка заблокирована, а не «проверена».
-      throw new AppError(
-        'UNSAFE_FILE',
-        'UPLOAD_SCAN_REQUIRED=true, но антивирусный сканер ещё не интегрирован; загрузка заблокирована',
-        {
-          nextAction:
-            'Отключите UPLOAD_SCAN_REQUIRED для локального профиля или дождитесь этапа удалённого подключения',
-        },
-      );
-    }
+    const scanStatus = await this.scanOrBlock(buf, name);
     mkdirSync(this.opts.stagingDir, { recursive: true, mode: 0o700 });
     const token = randomBytes(24).toString('base64url');
     const stagingPath = path.join(this.opts.stagingDir, `${token}.${ext}`);
@@ -146,9 +185,10 @@ export class FileStaging {
       stagingPath,
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + this.opts.ttlSeconds * 1000).toISOString(),
+      scanStatus,
     };
     this.db.run(
-      'INSERT INTO file_manifests (token, principal_id, sha256, size, original_name, mime, staging_path, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO file_manifests (token, principal_id, sha256, size, original_name, mime, staging_path, created_at, expires_at, scan_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       manifest.token,
       manifest.principalId,
       manifest.sha256,
@@ -158,9 +198,42 @@ export class FileStaging {
       manifest.stagingPath,
       manifest.createdAt,
       manifest.expiresAt,
+      manifest.scanStatus,
     );
-    this.logger.info({ token, size: buf.length, mime }, 'file staged');
+    this.logger.info({ token, size: buf.length, mime, scanStatus }, 'file staged');
     return manifest;
+  }
+
+  /** T27: без сканера при UPLOAD_SCAN_REQUIRED=true файл не сохраняется; вердикт «infected» — отказ. */
+  private async scanOrBlock(buf: Buffer, name: string): Promise<ScanStatus> {
+    if (!this.opts.scanRequired) return 'skipped';
+    const scanner = this.opts.scanner;
+    if (!scanner) {
+      throw new AppError(
+        'FEATURE_UNAVAILABLE',
+        'UPLOAD_SCAN_REQUIRED=true, но сканер не настроен (UPLOAD_SCANNER_URL); загрузка заблокирована',
+        { nextAction: 'Укажите UPLOAD_SCANNER_URL=clamd://host:port и проверьте npm run doctor' },
+      );
+    }
+    let verdict;
+    try {
+      verdict = await scanner.scan(buf);
+    } catch (e) {
+      const reason = e instanceof ScannerUnavailableError ? e.message : 'ошибка сканера';
+      this.logger.warn({ scanner: scanner.name, reason }, 'file scan unavailable');
+      throw new AppError(
+        'FEATURE_UNAVAILABLE',
+        'Антивирусный сканер недоступен; загрузка заблокирована, файл не сохранён',
+        { nextAction: 'Проверьте службу clamd и UPLOAD_SCANNER_URL (npm run doctor), затем повторите' },
+      );
+    }
+    if (verdict.status === 'infected') {
+      this.logger.warn({ scanner: scanner.name, signature: verdict.signature }, 'file rejected by scanner');
+      throw new AppError('UNSAFE_FILE', `Файл «${name}» отклонён антивирусом: ${verdict.signature}`, {
+        field: 'file',
+      });
+    }
+    return 'clean';
   }
 
   /** Манифест по токену: только свой, не истёкший. Путь наружу не отдаётся. */
@@ -176,21 +249,36 @@ export class FileStaging {
       this.remove(row.token, row.staging_path);
       throw invalid();
     }
-    return {
-      token: row.token,
-      principalId: row.principal_id,
-      sha256: row.sha256,
-      size: row.size,
-      originalName: row.original_name,
-      mime: row.mime,
-      stagingPath: row.staging_path,
-      createdAt: row.created_at,
-      expiresAt: row.expires_at,
-    };
+    return toManifest(row);
   }
 
-  /** Читает staged-копию и сверяет хеш/размер с манифестом (T26). */
+  /** Свои подготовленные файлы (панель), без путей. */
+  listOwn(principalId: string): StagedFileInfo[] {
+    return this.db
+      .all<ManifestRow>(
+        'SELECT * FROM file_manifests WHERE principal_id = ? AND expires_at >= ? ORDER BY created_at DESC',
+        principalId,
+        new Date().toISOString(),
+      )
+      .map((r) => ({
+        token: r.token,
+        originalName: r.original_name,
+        size: r.size,
+        mime: r.mime,
+        sha256: r.sha256,
+        createdAt: r.created_at,
+        expiresAt: r.expires_at,
+        scanStatus: r.scan_status,
+      }));
+  }
+
+  /** Читает staged-копию и сверяет хеш/размер с манифестом (T26); при обязательном сканере — только clean. */
   readVerified(manifest: FileManifest): Buffer {
+    if (this.opts.scanRequired && manifest.scanStatus !== 'clean') {
+      throw new AppError('UNSAFE_FILE', 'Файл не прошёл антивирусную проверку; подготовьте его заново', {
+        field: 'fileToken',
+      });
+    }
     let buf: Buffer;
     try {
       buf = readFileSync(manifest.stagingPath);
