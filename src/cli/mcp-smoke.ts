@@ -1,14 +1,19 @@
 /**
  * npm run mcp:smoke -- --transport stdio|http [--config path]
+ * npm run mcp:smoke -- --transport http --url https://mcp.example.com/mcp [--token-env MCP_SMOKE_TOKEN]
  * Официальный MCP client: initialize → tools/list → безопасный вызов bitrix_server_version
- * (без обращения к Bitrix24). Для stdio запускается дочерний процесс сервера; для http —
- * сервер поднимается в этом же процессе на loopback со случайным портом.
+ * (без обращения к Bitrix24). Для stdio запускается дочерний процесс сервера; для http без --url
+ * сервер поднимается в этом же процессе на loopback; с --url проверяется УДАЛЁННЫЙ сервер
+ * (ТЗ §17.6 п.7, §20.2 «remote MCP smoke»): bearer-токен берётся из переменной окружения,
+ * не из аргумента командной строки (аргументы видны в списке процессов).
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createApp } from '../app/container.js';
+import { isLoopbackHost } from '../config/env.js';
+import { AppError } from '../errors/app-error.js';
 import { startHttp } from '../mcp/http.js';
 import { createSilentLogger } from '../logging/logger.js';
 import { cliArgs, cliConfig, fail, out } from './common.js';
@@ -16,7 +21,7 @@ import { cliArgs, cliConfig, fail, out } from './common.js';
 async function runChecks(client: Client): Promise<void> {
   const tools = await client.listTools();
   const names = tools.tools.map((t) => t.name);
-  out(`tools/list: ${names.length} инструментов: ${names.join(', ')}`);
+  out(`tools/list: ${String(names.length)} инструментов: ${names.join(', ')}`);
   if (!names.includes('bitrix_server_version'))
     throw new Error('bitrix_server_version отсутствует в tools/list');
   const r = await client.callTool({ name: 'bitrix_server_version', arguments: {} });
@@ -28,9 +33,55 @@ async function runChecks(client: Client): Promise<void> {
   out('tools/call с лишним параметром: isError=true (ожидаемо)');
 }
 
+async function remoteSmoke(rawUrl: string, tokenEnv: string): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new AppError('VALIDATION_ERROR', '--url должен быть абсолютным адресом MCP endpoint', {
+      field: 'url',
+    });
+  }
+  if (url.protocol !== 'https:' && !isLoopbackHost(url.hostname)) {
+    throw new AppError('VALIDATION_ERROR', 'Удалённый smoke только по https (http — лишь для loopback)', {
+      field: 'url',
+    });
+  }
+  const token = process.env[tokenEnv];
+  if (!token) {
+    throw new AppError('CONFIG_INVALID', `Переменная окружения ${tokenEnv} с bearer-токеном не задана`, {
+      field: tokenEnv,
+      nextAction: `Получите access token у authorization server и выполните: ${tokenEnv}=... npm run mcp:smoke -- --transport http --url ${url.origin}${url.pathname}`,
+    });
+  }
+  out(`http: удалённый сервер ${url.origin}${url.pathname}`);
+  const client = new Client({ name: 'mcp-smoke', version: '0.0.0' });
+  await client.connect(
+    new StreamableHTTPClientTransport(url, { authProvider: { token: () => Promise.resolve(token) } }),
+  );
+  try {
+    await runChecks(client);
+  } finally {
+    await client.close();
+  }
+  out('remote http smoke: OK');
+}
+
 async function main(): Promise<void> {
-  const args = cliArgs(process.argv.slice(2), { transport: { kind: 'string' } });
+  const args = cliArgs(process.argv.slice(2), {
+    transport: { kind: 'string' },
+    url: { kind: 'string' },
+    'token-env': { kind: 'string' },
+  });
   const transport = args.values['transport'] ?? 'stdio';
+  const remoteUrl = args.values['url'];
+
+  if (transport === 'http' && remoteUrl) {
+    await remoteSmoke(remoteUrl, args.values['token-env'] ?? 'MCP_SMOKE_TOKEN');
+    return;
+  }
+  if (remoteUrl) throw new Error('--url применим только с --transport http');
+
   const config = cliConfig(args);
   const configPath = config.configPath ?? path.resolve(process.cwd(), '.env');
 

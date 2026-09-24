@@ -124,6 +124,8 @@ const RawEnvSchema = z.object({
   MCP_AUTH_ALLOWED_SUBJECTS: csv,
   MCP_ALLOWED_ORIGINS: csv,
   MCP_ALLOWED_HOSTS: csv,
+  /** ТЗ §8.6: входящие read-вызовы на оператора в минуту (write-подготовки ограничены в MutationExecutor: 10/мин). */
+  MCP_INBOUND_READ_PER_MINUTE: intInRange('MCP_INBOUND_READ_PER_MINUTE', 1, 100_000).default(60),
 
   BITRIX_CLIENT_ID: optionalString,
   BITRIX_CLIENT_SECRET: optionalString,
@@ -172,6 +174,9 @@ export interface AppConfig {
     readonly authMode: 'local' | 'oauth';
     readonly allowedHosts: readonly string[];
     readonly allowedOrigins: readonly string[];
+    /** Заполнено только при MCP_AUTH_MODE=oauth. */
+    readonly auth: McpAuthSettings | undefined;
+    readonly inboundReadPerMinute: number;
   };
   readonly bitrix: {
     readonly authMode: 'webhook' | 'oauth';
@@ -260,6 +265,48 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 export function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(host.toLowerCase());
+}
+
+/** Настройки OAuth-защиты MCP (ТЗ §4.2, §18.3; спецификация MCP Authorization, S25). */
+export interface McpAuthSettings {
+  /** Ожидаемый `iss` — строка как задана, без нормализации (сравнение точное). */
+  readonly issuer: string;
+  /** Ожидаемый `aud`; по умолчанию — канонический адрес сервера (RFC 8707). */
+  readonly audience: string;
+  readonly jwksUri: string;
+  readonly allowedSubjects: readonly string[];
+  /** Канонический URI ресурса: MCP_PUBLIC_URL без завершающего `/` и без fragment. */
+  readonly resource: string;
+  /** Адрес документа RFC 9728 для заголовка WWW-Authenticate. */
+  readonly metadataUrl: string;
+  readonly publicOrigin: string;
+}
+
+/** https обязателен; http допустим только для loopback (локальные проверки). Без учётных данных и fragment. */
+function parseServiceUrl(field: string, value: string | undefined, why: string): URL {
+  if (!value) throw configError(field, why);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configError(field, 'не является абсолютным URL');
+  }
+  if (url.username || url.password) throw configError(field, 'учётные данные в URL недопустимы');
+  if (url.hash) throw configError(field, 'fragment (#...) недопустим');
+  if (url.protocol === 'https:') return url;
+  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return url;
+  throw configError(field, 'требуется https (http допустим только для loopback)');
+}
+
+function canonicalResource(publicUrl: URL): string {
+  const path = publicUrl.pathname.replace(/\/+$/, '');
+  return `${publicUrl.origin}${path}`;
+}
+
+/** RFC 9728 §3: `/.well-known/oauth-protected-resource` + путь ресурса. */
+function protectedResourceMetadataUrl(publicUrl: URL): string {
+  const path = publicUrl.pathname.replace(/\/+$/, '');
+  return `${publicUrl.origin}/.well-known/oauth-protected-resource${path}`;
 }
 
 function readEnvFile(filePath: string): Record<string, string> {
@@ -379,11 +426,46 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       'внешний интерфейс запрещён при MCP_AUTH_MODE=local; допустим только loopback',
     );
   }
+  // Удалённый профиль (ТЗ §4.2, §8.1, §13 п.4): OAuth-защита самого MCP, не Bitrix OAuth.
+  let mcpAuth: McpAuthSettings | undefined;
   if (raw.MCP_AUTH_MODE === 'oauth') {
-    throw configError(
-      'MCP_AUTH_MODE',
-      'режим oauth реализуется на этапе удалённого подключения; пока используйте local',
+    if (raw.MCP_TRANSPORT !== 'http') {
+      throw configError(
+        'MCP_AUTH_MODE',
+        'oauth применим только к MCP_TRANSPORT=http; для stdio используйте local',
+      );
+    }
+    const publicUrl = parseServiceUrl(
+      'MCP_PUBLIC_URL',
+      raw.MCP_PUBLIC_URL,
+      'обязателен при MCP_AUTH_MODE=oauth: канонический адрес сервера, например https://mcp.example.com/mcp',
     );
+    const issuer = parseServiceUrl(
+      'MCP_AUTH_ISSUER',
+      raw.MCP_AUTH_ISSUER,
+      'обязателен при MCP_AUTH_MODE=oauth',
+    );
+    const jwks = parseServiceUrl(
+      'MCP_AUTH_JWKS_URI',
+      raw.MCP_AUTH_JWKS_URI,
+      'обязателен при MCP_AUTH_MODE=oauth',
+    );
+    if (raw.MCP_AUTH_ALLOWED_SUBJECTS.length === 0) {
+      throw configError(
+        'MCP_AUTH_ALLOWED_SUBJECTS',
+        'при MCP_AUTH_MODE=oauth allowlist субъектов обязателен: пустой список = никто не допущен',
+      );
+    }
+    const resource = canonicalResource(publicUrl);
+    mcpAuth = {
+      issuer: raw.MCP_AUTH_ISSUER ?? issuer.href,
+      audience: raw.MCP_AUTH_AUDIENCE ?? resource,
+      jwksUri: jwks.href,
+      allowedSubjects: raw.MCP_AUTH_ALLOWED_SUBJECTS,
+      resource,
+      metadataUrl: protectedResourceMetadataUrl(publicUrl),
+      publicOrigin: publicUrl.origin,
+    };
   }
   if (!raw.READ_ONLY_MODE && !raw.CONFIRM_ALL_WRITES) {
     throw configError(
@@ -427,8 +509,14 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       publicUrl: raw.MCP_PUBLIC_URL,
       principalId: raw.LOCAL_PRINCIPAL_ID,
       authMode: raw.MCP_AUTH_MODE,
-      allowedHosts: raw.MCP_ALLOWED_HOSTS,
+      // В oauth-режиме Host по умолчанию ограничен хостом публичного адреса (ТЗ §8.6).
+      allowedHosts:
+        raw.MCP_ALLOWED_HOSTS.length === 0 && mcpAuth
+          ? [new URL(mcpAuth.publicOrigin).hostname]
+          : raw.MCP_ALLOWED_HOSTS,
       allowedOrigins: raw.MCP_ALLOWED_ORIGINS,
+      auth: mcpAuth,
+      inboundReadPerMinute: raw.MCP_INBOUND_READ_PER_MINUTE,
     },
     bitrix: {
       authMode: raw.BITRIX_AUTH_MODE,

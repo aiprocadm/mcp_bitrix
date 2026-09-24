@@ -15,6 +15,7 @@ import { AppError } from '../errors/app-error.js';
 import { AuditLog } from '../logging/audit.js';
 import { createLogger, type AppLogger } from '../logging/logger.js';
 import { FileStaging } from '../files/staging.js';
+import { InboundLimiter } from '../security/inbound-limiter.js';
 import { ApprovalService } from '../security/approval-service.js';
 import { ensureMasterKey, SecretBox } from '../security/crypto.js';
 import { MutationExecutor } from '../security/mutation-executor.js';
@@ -42,6 +43,8 @@ export interface AppContainer {
   readonly files: FileStaging;
   readonly outputPolicy: OutputPolicyEngine;
   readonly principal: Principal;
+  /** Лимит входящих read-вызовов на оператора (ТЗ §8.6). */
+  readonly inboundLimiter: InboundLimiter;
   readonly tools: readonly ToolDefinition[];
   close(): void;
 }
@@ -153,6 +156,7 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
     files,
     outputPolicy,
     principal,
+    inboundLimiter: new InboundLimiter(config.server.inboundReadPerMinute),
     tools,
     close() {
       db.close();

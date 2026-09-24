@@ -34,9 +34,24 @@ claude mcp get bitrix24
 - Логи сервера идут в stderr; Claude Code показывает их в `/mcp` → сервер → логи.
 - `node` не найден в PATH клиента → укажите абсолютный путь к `node` вместо `node`.
 
-## Удалённое подключение (HTTP)
+## Удалённое подключение (HTTP, ТЗ §18.3)
 
-Появится на этапе 12 (HTTPS + OAuth-защита MCP). До этого HTTP-транспорт работает только на loopback для разработки:
+Нужен опубликованный сервер (`docs/deployment.md`: HTTPS + `MCP_AUTH_MODE=oauth`). Тогда:
+
+```bash
+claude mcp add --transport http --scope user bitrix24-remote https://mcp.example.com/mcp
+claude mcp list
+```
+
+Далее `/mcp` → `bitrix24-remote` → вход. Claude Code получит `401` с `WWW-Authenticate`, прочитает
+`/.well-known/oauth-protected-resource/mcp`, найдёт ваш authorization server и откроет браузер для входа.
+Client ID/secret Bitrix24 в эти поля не вставляйте — это другая OAuth-связь. Если ваш AS требует заранее
+зарегистрированного клиента, зарегистрируйте callback Claude Code по актуальной документации Claude Code
+и сообщите client ID пользователям.
+
+Состояние: реальное удалённое подключение Claude Code не выполнялось (`not-run`) — нужен домен и AS заказчика.
+
+Локально для разработки HTTP-транспорт по-прежнему работает на loopback без токена:
 
 ```bash
 npm run dev:http
