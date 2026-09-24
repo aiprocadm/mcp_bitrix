@@ -4,13 +4,13 @@
 
 ## Текущее положение
 
-|                       |                                                                                                                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Дата обновления       | 2026-09-23 (срез 5)                                                                                                                                                                       |
-| Последний влитый срез | срез 4, PR #4 (этапы 1–8); срез 5 (этап 9) — в PR                                                                                                                                         |
-| Текущий этап          | **10. Тесты (сводно)**: сводная проверка приёмки §20.1 по каждому критерию, transport-тесты, блокирующие дефекты; затем 11 (README/инструкции: Windows, Desktop, backup, troubleshooting) |
-| Следующие             | 11 (README/инструкции), 12 (сервер и ChatGPT), 13 (полная версия)                                                                                                                         |
-| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                                                                                  |
+|                       |                                                                                                                                                                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Дата обновления       | 2026-09-23 (срез 6)                                                                                                                                                                                                         |
+| Последний влитый срез | срез 5, PR #5 (этапы 1–9); срез 6 (этап 10) — в PR                                                                                                                                                                          |
+| Текущий этап          | **11. README и инструкции**: Windows/Desktop проверка по тексту, `docs/claude-desktop.md`, `docs/operations.md` (backup/restore ключа и БД, ротация вебхука), `docs/deployment.md` (Compose), troubleshooting по live-smoke |
+| Следующие             | 12 (сервер и ChatGPT), 13 (полная версия §11), 14 (destructive)                                                                                                                                                             |
+| Реальный портал       | не подключался; все проверки — на mock (см. `docs/acceptance-report.md`)                                                                                                                                                    |
 
 ## Этапы (ТЗ §22)
 
@@ -25,11 +25,19 @@
 | 7   | MVP CRM tools              | ✅ 23.09     | `src/tools/crm/`: `crm_list_records`, `crm_get_record`, `crm_create_record`, `crm_fields_get` (entityType=deal)                           |
 | 8   | MVP task tools             | ✅ 23.09     | `src/tools/tasks/`: `task_create`, `task_get`, `task_list` (legacy `tasks.task.*`, схема из `tasks.task.getfields`)                       |
 | 9   | MVP chat/calendar/disk     | ✅ 23.09     | `src/tools/chat/send-message.ts`, `src/tools/calendar/create-event.ts` (+ `time.ts`), `src/tools/disk/upload-file.ts`                     |
-| 10  | Тесты (сводно)             | ⏳ следующий | сводный отчёт по §20.1, transport-тесты, live-smoke сценарий §10.3 (готовность без портала)                                               |
-| 11  | README и инструкции        | частично     | README, setup, webhook, claude-code написаны; Windows/Desktop/troubleshooting/backup — дополнить                                          |
+| 10  | Тесты (сводно)             | ✅ 23.09     | `docs/acceptance-report.md` — полная таблица T01–T48 и §20.1–20.3; `npm run test:live` (`src/live/scenario.ts`); T23, T43, HTTP-курсор    |
+| 11  | README и инструкции        | ⏳ следующий | есть: README, setup Linux/Windows, webhook, claude-code, troubleshooting; нет: claude-desktop, operations (backup), deployment, chatgpt   |
 | 12  | Сервер и ChatGPT           | —            | HTTP production, OAuth MCP, панель, сканер                                                                                                |
 | 13  | Полная версия              | —            | §11 ТЗ                                                                                                                                    |
 | 14  | Destructive-функции        | —            | §9, последняя очередь                                                                                                                     |
+
+## Что именно сделано (срез 6, этап 10)
+
+- `docs/acceptance-report.md` переписан целиком: §20.1 по каждому критерию со средой и доказательством, §20.2/§20.3, полная таблица T01–T48 (passed/mock/not-run/blocked/n/a — без пустых строк).
+- Живой сценарий §10.3: `src/live/scenario.ts` + `npm run test:live` (`src/cli/live-smoke.ts`). Только при `LIVE_TESTS_ENABLED=true`; `--read-only` (connection info, profile через raw, capabilities методов MVP с пометкой blocked, 5 сделок, одна сделка, 5 задач); `--write --prepare` (пять планов с `LIVE_TEST_PREFIX`, operationId в JSON-отчёт `data/live-smoke-report.json`); `--write --execute` (те же аргументы с approvalId, затем повтор ключа → replay). Удаления нет. Сценарий проверен на mock (`tests/integration/live-smoke.test.ts`): без флага отказ, без подтверждения — blocked и ни одного write, после подтверждения — 5 объектов по одному разу.
+- `doctor`: список MVP-методов расширен до всех 21 метода, которые вызывают 11 инструментов (включая `tasks.task.getfields`, `im.dialog.get`, `disk.folder.get`, `calendar.section.get`, `calendar.event.getbyid`).
+- Тесты: +7 (177): T23 (инструкция в TITLE — данные, лишних вызовов нет), T43 (`ENABLED_MODULES=system,crm` отключает только чужие инструменты), HTTP: курсор списка сделок между двумя сессиями одного оператора, live-smoke на mock.
+- Итог этапа: блокирующих дефектов на mock не найдено; все пункты реальной интеграции остаются `not-run` до портала заказчика.
 
 ## Что именно сделано (срез 5, этап 9)
 
@@ -85,7 +93,7 @@
 ## Что НЕ сделано / ограничения
 
 - Все 11 MVP-инструментов §10.1 реализованы (плюс `crm_fields_get`, `task_list` и т. п. — 15 в каталоге). Ни один не проверен на реальном портале. Образцы write-инструментов — `src/tools/crm/create-record.ts`, `src/tools/tasks/task-create.ts`, `src/tools/disk/upload-file.ts`.
-- Живой smoke-сценарий §10.3 (`npm run test:live`) ещё не написан — этап 10.
+- Живой smoke-сценарий §10.3 написан (`npm run test:live`), на портале не запускался — need портал заказчика.
 - `task_get` без `include` (чек-листы/комментарии), `task_update`/`task_complete`/`task_delete` — полная версия.
 - `crm_get_record` без `include` (дела/комментарии/товары) — полная версия; `crm_search_records`, `crm_update_record` — полная версия.
 - Антивирусный сканер staged-файлов не интегрирован: `UPLOAD_SCAN_REQUIRED=true` блокирует загрузку честно (этап 12).

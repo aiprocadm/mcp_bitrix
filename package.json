@@ -28,6 +28,7 @@
     "bitrix:profile": "tsx src/cli/profile.ts",
     "schemas:export": "tsx scripts/export-tool-schemas.ts",
     "mcp:smoke": "tsx src/cli/mcp-smoke.ts",
+    "test:live": "tsx src/cli/live-smoke.ts",
     "approval:review": "tsx src/cli/approval-review.ts",
     "file:stage": "tsx src/cli/file-stage.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",

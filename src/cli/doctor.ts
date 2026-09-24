@@ -16,17 +16,29 @@ import { methodBelongsToModule } from '../tools/system/capabilities.js';
 import { MCP_SDK_VERSION, NODE_VERSION, SERVER_VERSION } from '../version.js';
 import { cliArgs, cliConfig, out, printChecks, type Check } from './common.js';
 
+/** Все методы, которые вызывают 11 MVP-инструментов (включая вспомогательные чтения). */
 const MVP_METHODS = [
   'profile',
+  'scope',
+  'method.get',
+  'crm.deal.fields',
   'crm.deal.list',
   'crm.deal.get',
   'crm.deal.add',
+  'tasks.task.getfields',
   'tasks.task.add',
   'tasks.task.get',
   'tasks.task.list',
+  'im.dialog.get',
   'im.message.add',
+  'im.dialog.messages.get',
+  'disk.folder.get',
+  'disk.folder.getchildren',
   'disk.folder.uploadfile',
+  'disk.file.get',
+  'calendar.section.get',
   'calendar.event.add',
+  'calendar.event.getbyid',
 ];
 
 async function main(): Promise<void> {

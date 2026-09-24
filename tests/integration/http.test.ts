@@ -4,15 +4,27 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { startHttp, type HttpHandle } from '../../src/mcp/http.js';
 import { createTestApp, structured, type TestApp } from '../helpers/app.js';
-import { legacyOk, PROFILE_RESULT } from '../helpers/mock-bitrix.js';
+import {
+  DEAL_FIELDS,
+  dealRecord,
+  deals,
+  legacyListPage,
+  legacyOk,
+  PROFILE_RESULT,
+} from '../helpers/mock-bitrix.js';
 
 describe('Streamable HTTP', () => {
   let t: TestApp;
   let handle: HttpHandle;
+  const ALL = deals(1, 30).map((d) => dealRecord(Number(d.ID)));
 
   beforeAll(async () => {
     t = createTestApp({ MCP_TRANSPORT: 'http' });
-    t.bitrix.on('profile', legacyOk(PROFILE_RESULT)).on('scope', legacyOk(['crm']));
+    t.bitrix
+      .on('profile', legacyOk(PROFILE_RESULT))
+      .on('scope', legacyOk(['crm']))
+      .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
+      .on('crm.deal.list', (c) => legacyListPage(ALL, Number(c.body['start'] ?? 0), 50));
     handle = await startHttp(t.app, { host: '127.0.0.1', port: 0 });
   });
   afterAll(async () => {
@@ -50,6 +62,35 @@ describe('Streamable HTTP', () => {
       expect(transport.sessionId).toBeTruthy();
     } finally {
       await client.close();
+    }
+  });
+
+  it('T41 (HTTP): CRM-список с курсором через две сессии одного оператора; вторая сессия видит тот же курсор', async () => {
+    const c1 = new Client({ name: 'http-a', version: '0.0.0' });
+    await c1.connect(new StreamableHTTPClientTransport(new URL(handle.url)));
+    const c2 = new Client({ name: 'http-b', version: '0.0.0' });
+    await c2.connect(new StreamableHTTPClientTransport(new URL(handle.url)));
+    try {
+      const p1 = structured<{
+        success: boolean;
+        data: { returnedCount: number };
+        meta: { page: { nextCursor: string } };
+      }>(await c1.callTool({ name: 'crm_list_records', arguments: { entityType: 'deal', pageSize: 20 } }));
+      expect(p1.success).toBe(true);
+      expect(p1.data.returnedCount).toBe(20);
+      // курсор привязан к оператору/порталу/фильтру, а не к HTTP-сессии — второй клиент того же владельца продолжает
+      const p2 = structured<{ success: boolean; data: { returnedCount: number } }>(
+        await c2.callTool({
+          name: 'crm_list_records',
+          arguments: { entityType: 'deal', pageSize: 20, cursor: p1.meta.page.nextCursor },
+        }),
+      );
+      expect(p2.success).toBe(true);
+      expect(p2.data.returnedCount).toBe(10);
+      expect(t.bitrix.callsTo('crm.deal.list')).toHaveLength(1);
+    } finally {
+      await c1.close();
+      await c2.close();
     }
   });
 
