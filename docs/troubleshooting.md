@@ -21,5 +21,9 @@
 | `OPERATION_OUTCOME_UNKNOWN`                                        | Ответ Bitrix24 на запись потерян; проверьте объект в интерфейсе, повтор не делайте вслепую (`operation_status` покажет состояние)                                      |
 | `UNSAFE_FILE` / `FILE_TOO_LARGE`                                   | Файл должен лежать в `UPLOAD_ROOT`, быть txt/md/csv/pdf/docx/xlsx/png/jpg до 10 МиБ, без симлинков; `npm run file:stage -- --path <абс. путь>`                         |
 | `approval:review` пишет «только в интерактивном терминале»         | Команда намеренно не принимает ввод через pipe/скрипт; запустите её вручную                                                                                            |
+| `test:live` пишет «Живые тесты выключены»                          | Это защита: `LIVE_TESTS_ENABLED=true` включайте только для согласованного тестового портала; для записи ещё нужны `TEST_*` цели и `READ_ONLY_MODE=false`               |
+| `test:live --write --execute` показывает BLOCK                     | Планы не подтверждены: выполните `npm run approval:review -- --id <operationId>` для каждого из отчёта `data/live-smoke-report.json`                                   |
+| `backup --restore` пишет «ключ не подходит»                        | Копия зашифрована ключом из `SECRETS_KEY_FILE` того сервера, где создана; восстановите сначала ключ                                                                    |
+| Контейнер не стартует с `CONFIG_INVALID MCP_HOST`                  | Внешний интерфейс при `MCP_AUTH_MODE=local` запрещён; в `compose.yaml` используется `network_mode: host` и `MCP_HOST=127.0.0.1` до этапа 12                            |
 
 Для обращения за помощью достаточно кода ошибки и `requestId` из ответа; секрет вебхука никому не отправляйте.

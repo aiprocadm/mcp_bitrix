@@ -31,6 +31,7 @@
     "test:live": "tsx src/cli/live-smoke.ts",
     "approval:review": "tsx src/cli/approval-review.ts",
     "file:stage": "tsx src/cli/file-stage.ts",
+    "backup": "tsx src/cli/backup.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

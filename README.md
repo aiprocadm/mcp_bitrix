@@ -48,7 +48,7 @@ claude mcp add --transport stdio --scope local bitrix24 -- node /полный/п
 claude mcp list
 ```
 
-Затем в Claude Code: `/mcp` и вызов `bitrix_connection_info`. Подробнее: `docs/claude-code.md`, `docs/claude-desktop.md`.
+Затем в Claude Code: `/mcp` и вызов `bitrix_connection_info`. Подробнее: `docs/claude-code.md`, `docs/claude-desktop.md`. Сервер на VPS и ограничения ChatGPT: `docs/deployment.md`, `docs/chatgpt.md`. Эксплуатация и резервные копии: `docs/operations.md`.
 
 ## Команды
 

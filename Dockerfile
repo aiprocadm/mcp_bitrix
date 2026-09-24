@@ -18,6 +18,6 @@ COPY package.json ./
 COPY policies ./policies
 RUN mkdir -p /app/data && chown -R mcp:mcp /app
 USER mcp
-# Транспорт и конфигурация задаются аргументами/переменными при запуске.
-ENTRYPOINT ["node", "dist/index.js"]
-CMD ["--transport", "http", "--config", "/app/config/.env"]
+# Без ENTRYPOINT: тогда `docker compose run --rm bitrix24-mcp node dist/cli/setup.js ...` запускает именно CLI,
+# а не сервер с чужими аргументами (найдено живой проверкой 24.09).
+CMD ["node", "dist/index.js", "--transport", "http", "--config", "/app/config/.env"]
