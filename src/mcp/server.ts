@@ -1,9 +1,11 @@
 /**
  * MCP-сервер, независимый от транспорта (ТЗ §12 mcp/server.ts).
  * Один экземпляр на stdio-процесс; в HTTP — экземпляр на сессию (общий AppContainer).
+ * В удалённом режиме принципал сессии — субъект проверенного токена, а не LOCAL_PRINCIPAL_ID.
  */
 import { McpServer } from '@modelcontextprotocol/server';
 import type { AppContainer } from '../app/container.js';
+import type { Principal } from '../auth/principal.js';
 import { SERVER_VERSION } from '../version.js';
 import { registerTools, type RegisteredToolInfo } from './register-tools.js';
 
@@ -12,7 +14,7 @@ export interface McpServerHandle {
   tools: RegisteredToolInfo[];
 }
 
-export function createMcpServer(app: AppContainer): McpServerHandle {
+export function createMcpServer(app: AppContainer, opts: { principal?: Principal } = {}): McpServerHandle {
   const server = new McpServer(
     { name: app.config.server.name, version: SERVER_VERSION, title: 'Bitrix24 MCP Server' },
     {
@@ -23,6 +25,6 @@ export function createMcpServer(app: AppContainer): McpServerHandle {
         'Начните с bitrix_connection_info.',
     },
   );
-  const tools = registerTools(server, app);
+  const tools = registerTools(server, app, opts.principal ?? app.principal);
   return { server, tools };
 }

@@ -61,6 +61,7 @@ claude mcp list
 | `npm run doctor [-- --offline]`                                                      | Диагностика; `--offline` — без обращения к порталу                                                              |
 | `npm run bitrix:profile`                                                             | Один безопасный запрос `profile`                                                                                |
 | `npm run mcp:smoke -- --transport stdio\|http`                                       | Проверка через официальный MCP-клиент                                                                           |
+| `MCP_SMOKE_TOKEN=... npm run mcp:smoke -- --transport http --url https://…/mcp`      | Удалённый smoke опубликованного сервера с bearer-токеном (токен только из переменной окружения)                 |
 | `npm run schemas:export`                                                             | JSON Schema инструментов → `docs/schemas/`, каталог → `docs/tools-catalog.md`                                   |
 | `npm run approval:review -- --id <operationId>` / `-- --list`                        | Просмотр плана записи и решение человека (только в терминале, без `--yes`)                                      |
 | `npm run file:stage -- --path <абс. путь в UPLOAD_ROOT>`                             | Подготовка файла к загрузке на Диск: проверка, копия, `fileToken`                                               |

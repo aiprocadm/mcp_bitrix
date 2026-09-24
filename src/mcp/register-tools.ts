@@ -1,13 +1,13 @@
 /**
  * Регистрация инструментов в McpServer и единый диспетчер вызова (ТЗ §4.3):
- * контекст → политика (модуль, режим записи, роль) → handler → аудит → output policy →
+ * контекст → лимит входящих → политика (модуль, режим записи, роль) → handler → аудит → output policy →
  * лимит объёма → CallToolResult. Скрытые инструменты (read-only) отключены в SDK и
- * дополнительно отказывают в handler (T10).
+ * дополнительно отказывают в handler (T10). Принципал — параметр: в HTTP+OAuth он свой на сессию.
  */
 import { randomUUID } from 'node:crypto';
 import type { CallToolResult, McpServer, RegisteredTool } from '@modelcontextprotocol/server';
 import type { AppContainer } from '../app/container.js';
-import { roleAtLeast } from '../auth/principal.js';
+import { roleAtLeast, type Principal } from '../auth/principal.js';
 import { AppError } from '../errors/app-error.js';
 import { isWriteOperation, type ToolContext, type ToolDefinition } from '../tools/types.js';
 import { enforceResponseLimit, envelopeSchema, fail, toCallToolResult, type Envelope } from './result.js';
@@ -20,25 +20,32 @@ export interface RegisteredToolInfo {
   hiddenReason?: string;
 }
 
-export function hiddenReason(def: ToolDefinition, app: AppContainer): string | undefined {
+export function hiddenReason(
+  def: ToolDefinition,
+  app: AppContainer,
+  principal: Principal = app.principal,
+): string | undefined {
   const p = app.config.policy;
   if (isWriteOperation(def.operation) && p.readOnlyMode) return 'READ_ONLY_MODE=true';
   if (def.operation === 'delete' && !p.enableDestructiveTools) return 'ENABLE_DESTRUCTIVE_TOOLS=false';
   if (def.name === 'bitrix_rest_call' && (!p.enableRawRest || p.rawRestMode === 'disabled'))
     return 'ENABLE_RAW_REST=false';
-  const denied = app.policies.access.deniedTools[app.principal.role] ?? [];
-  if (denied.includes(def.name)) return `запрещён ролью ${app.principal.role}`;
+  const denied = app.policies.access.deniedTools[principal.role] ?? [];
+  if (denied.includes(def.name)) return `запрещён ролью ${principal.role}`;
+  // Роль reader не видит инструменты записи: они всё равно отказали бы (ТЗ §10.4).
+  if (isWriteOperation(def.operation) && !roleAtLeast(principal.role, 'operator'))
+    return `запрещён ролью ${principal.role}`;
   return undefined;
 }
 
 /** Проверки до вызова handler. Выполняются на каждом tools/call, даже если инструмент скрыт. */
-export function gate(def: ToolDefinition, app: AppContainer): void {
+export function gate(def: ToolDefinition, app: AppContainer, principal: Principal = app.principal): void {
   if (!app.config.policy.enabledModules.has(def.module)) {
     throw new AppError('FEATURE_UNAVAILABLE', `Модуль ${def.module} выключен в ENABLED_MODULES`, {
       nextAction: 'Включите модуль в конфигурации',
     });
   }
-  const reason = hiddenReason(def, app);
+  const reason = hiddenReason(def, app, principal);
   if (reason) {
     if (reason.startsWith('READ_ONLY_MODE')) {
       throw new AppError('READ_ONLY_MODE', 'Сервер в режиме только чтения; запись выключена', {
@@ -49,10 +56,10 @@ export function gate(def: ToolDefinition, app: AppContainer): void {
     if (reason.startsWith('запрещён')) throw new AppError('ACCESS_DENIED', `Инструмент ${reason}`);
     throw new AppError('METHOD_NOT_ALLOWED', `Инструмент отключён: ${reason}`);
   }
-  if (isWriteOperation(def.operation) && !roleAtLeast(app.principal.role, 'operator')) {
+  if (isWriteOperation(def.operation) && !roleAtLeast(principal.role, 'operator')) {
     throw new AppError('ACCESS_DENIED', 'Роль reader не может выполнять записи');
   }
-  if (def.operation === 'delete' && !roleAtLeast(app.principal.role, 'administrator')) {
+  if (def.operation === 'delete' && !roleAtLeast(principal.role, 'administrator')) {
     throw new AppError('ACCESS_DENIED', 'Удаления доступны только роли administrator');
   }
 }
@@ -62,12 +69,13 @@ export async function dispatch(
   args: unknown,
   app: AppContainer,
   signal?: AbortSignal,
+  principal: Principal = app.principal,
 ): Promise<Envelope> {
   const requestId = randomUUID();
   const startedAt = Date.now();
   const ctx: ToolContext = {
     requestId,
-    principal: app.principal,
+    principal,
     config: app.config,
     policies: app.policies,
     bitrix: app.bitrix,
@@ -84,7 +92,9 @@ export async function dispatch(
   };
   let envelope: Envelope;
   try {
-    gate(def, app);
+    // ТЗ §8.6: read-вызовы — 60/мин на оператора; write-подготовки считает MutationExecutor.
+    if (!isWriteOperation(def.operation)) app.inboundLimiter.take(principal.id);
+    gate(def, app, principal);
     const parsed = def.inputSchema.safeParse(args);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -104,7 +114,7 @@ export async function dispatch(
   }
   app.audit.record({
     requestId,
-    principalId: app.principal.id,
+    principalId: principal.id,
     portalKey: app.auth.portalKey,
     tool: def.name,
     method: envelope.success ? envelope.meta.method : envelope.error.details.method,
@@ -114,7 +124,8 @@ export async function dispatch(
       ? 'success'
       : envelope.error.code === 'READ_ONLY_MODE' ||
           envelope.error.code === 'ACCESS_DENIED' ||
-          envelope.error.code === 'METHOD_NOT_ALLOWED'
+          envelope.error.code === 'METHOD_NOT_ALLOWED' ||
+          envelope.error.code === 'RATE_LIMITED'
         ? 'denied'
         : 'error',
     attempts: envelope.success ? envelope.meta.attempts : undefined,
@@ -125,7 +136,11 @@ export async function dispatch(
   return enforceResponseLimit(envelope, app.config.limits.maxResponseBytes);
 }
 
-export function registerTools(server: McpServer, app: AppContainer): RegisteredToolInfo[] {
+export function registerTools(
+  server: McpServer,
+  app: AppContainer,
+  principal: Principal = app.principal,
+): RegisteredToolInfo[] {
   const infos: RegisteredToolInfo[] = [];
   for (const def of app.tools) {
     const registered: RegisteredTool = server.registerTool(
@@ -139,11 +154,11 @@ export function registerTools(server: McpServer, app: AppContainer): RegisteredT
       },
       async (args, ctx): Promise<CallToolResult> => {
         // Схема уже проверена SDK; повторная проверка в dispatch защищает прямые вызовы (CLI/HTTP-обёртки).
-        const envelope = await dispatch(def, args, app, ctx.mcpReq.signal);
+        const envelope = await dispatch(def, args, app, ctx.mcpReq.signal, principal);
         return toCallToolResult(envelope) as CallToolResult;
       },
     );
-    const reason = hiddenReason(def, app);
+    const reason = hiddenReason(def, app, principal);
     if (reason) registered.disable();
     infos.push({
       name: def.name,

@@ -1,18 +1,52 @@
 # Развёртывание на VPS (ТЗ §17.6)
 
-Честное состояние на 2026-09-24: сервер умеет HTTP только на loopback (`MCP_AUTH_MODE=local`).
-Внешний интерфейс без OAuth-защиты MCP запрещён конфигурацией (`CONFIG_INVALID`), а OAuth-защита — этап 12.
-Поэтому сегодня VPS-профиль пригоден для: (а) одного владельца через SSH-туннель к `127.0.0.1:3000`,
-(б) подготовки инфраструктуры под этап 12. Публичный `https://mcp.example/mcp` появится после этапа 12.
+Состояние на 2026-09-24 (этап 12, срез 8): сервер умеет работать за HTTPS reverse proxy с OAuth-защитой MCP
+(`MCP_AUTH_MODE=oauth`, спецификация MCP Authorization — источник S25 в ТЗ). Проверено на mock-конфиге
+и тестовом издателе токенов; **с реальным доменом, реальным authorization server и реальным порталом не проверялось**
+(`not-run`, см. `docs/acceptance-report.md`). Панель подтверждений `/admin`, web-upload и сканер файлов — следующий срез:
+до них записи в удалённом режиме подтверждаются только локальной CLI `approval:review` на самом сервере.
+
+## Как устроена защита (что вы получаете)
+
+- Сервер — OAuth 2.1 **resource server**: токены выпускает ваш authorization server (AS), а сервер на **каждом** запросе
+  к `/mcp` и `/readyz` проверяет подпись (JWKS издателя), `iss`, `aud` (= `MCP_PUBLIC_URL`), срок, `sub` в allowlist
+  (`MCP_AUTH_ALLOWED_SUBJECTS`) и scope (`read`, `write`, `admin`).
+- Роль сессии = минимум из роли в `policies/access.json` (`principals.<sub>.role`, по умолчанию `reader`) и роли по scope
+  (`read`→reader, `write`→operator, `admin`→administrator). Роль `reader` не видит инструменты записи.
+- Без токена — `401` с `WWW-Authenticate: Bearer resource_metadata="https://<домен>/.well-known/oauth-protected-resource/mcp", scope="read"`;
+  просроченный/чужой токен — `401 invalid_token`; чужой `sub` — `403 access_denied`; без scope — `403 insufficient_scope`;
+  токен в строке запроса — `400`. Сессия MCP привязана к субъекту: чужой токен к чужой сессии — `403`.
+- Документ RFC 9728 отдаётся на `/.well-known/oauth-protected-resource` (и с суффиксом пути): `resource`,
+  `authorization_servers`, `scopes_supported` — по нему клиенты (Claude Code, ChatGPT) находят ваш AS.
+- Браузерные `Origin` — только из `MCP_ALLOWED_ORIGINS` (или origin публичного адреса); серверные клиенты Origin не шлют.
+- Входящие read-вызовы: `MCP_INBOUND_READ_PER_MINUTE` (60/мин на субъект), write-подготовки — 10/мин (ТЗ §8.6).
+
+## Требования к authorization server
+
+Сервер не содержит своего AS (ТЗ §18.3: «предпочесть готовый поддерживаемый provider»). Подойдёт любой OIDC/OAuth 2.1
+провайдер (например, Keycloak, Authentik, Auth0, Okta), который:
+
+1. выпускает **JWT** access tokens, подписанные асимметричным ключом (RS256/ES256/PS256/EdDSA) и публикует JWKS;
+2. ставит `aud` = канонический адрес сервера (`MCP_PUBLIC_URL` без завершающего `/`, RFC 8707 `resource`) —
+   клиенты MCP передают `resource` в запросах авторизации и токена, AS должен его учитывать;
+3. кладёт scope в `scope` (строка через пробел) или `scp` (массив) и знает scope `read`, `write`, `admin`;
+4. поддерживает PKCE и регистрацию клиентов так, как умеет ваш MCP-клиент: Client ID Metadata Documents или
+   Dynamic Client Registration (RFC 7591) для Claude Code/ChatGPT, либо заранее созданный клиент;
+5. даёт стабильный `sub` для каждого разрешённого сотрудника — именно эти значения идут в `MCP_AUTH_ALLOWED_SUBJECTS`.
+
+Токены Bitrix24 и его OAuth **не** участвуют: это другой контур (ТЗ §4.2).
 
 ## Шаги
 
 1. VPS с SSH-доступом; Docker Engine и Compose ставятся по официальной инструкции вашей ОС, без `curl | bash`.
-2. Скопируйте проект (git clone), создайте `config/.env` из `.env.example`, права `600`. Секреты — только в этом файле, не в образе.
-   Пути (`DATA_DIR`, `DATABASE_URL`, `*_POLICY_FILE`, `MCP_HOST`) в `config/.env` писать не нужно: их задаёт `compose.yaml`
-   и они главнее файла.
-3. Соберите образ и выполните первичную настройку **до** запуска сервера — без ключа шифрования сервер не стартует
-   (`ensureMasterKey(..., {create:false})`), а `restart: unless-stopped` превратит это в бесконечный перезапуск:
+2. Домен → A/AAAA-запись на VPS; nginx + сертификат (certbot). Скопируйте `deploy/nginx/mcp.conf.example`
+   в `/etc/nginx/sites-available/mcp.conf`, замените домен, `nginx -t && systemctl reload nginx`.
+   Наружу открыты только 80/443; порт 3000 приложения слушает `127.0.0.1` и не публикуется.
+3. Скопируйте проект (git clone), создайте `config/.env` из `examples/remote.env.example`, заполните
+   `MCP_PUBLIC_URL`, `MCP_AUTH_ISSUER`, `MCP_AUTH_JWKS_URI`, `MCP_AUTH_ALLOWED_SUBJECTS`, вебхук Bitrix24; права `600`.
+   Пути (`DATA_DIR`, `DATABASE_URL`, `*_POLICY_FILE`, `MCP_HOST`) задаёт `compose.yaml`, они главнее файла.
+4. Соберите образ и выполните первичную настройку **до** запуска сервера — без ключа шифрования сервер не стартует
+   (`restart: unless-stopped` превратил бы это в бесконечный перезапуск):
 
 ```bash
 docker compose build
@@ -21,35 +55,48 @@ docker compose run --rm bitrix24-mcp node dist/cli/doctor.js --config /app/confi
 ```
 
 `setup` создаёт в томе `mcp-data` ключ (`secrets/master.key`), каталоги и рабочие политики `policies/*.json`
-из примеров образа. Повторный запуск ничего не перезаписывает.
+из примеров образа. Добавьте в `policies/access.json` тома субъектов с ролями (по умолчанию все — `reader`).
 
-4. Запустите и проверьте:
+5. Запустите и проверьте с самого сервера:
 
 ```bash
 docker compose up -d
-docker compose ps            # колонка STATUS должна стать healthy
+docker compose ps            # STATUS: healthy
 docker compose logs --tail=100 bitrix24-mcp
 curl --fail http://127.0.0.1:3000/healthz
+curl -i http://127.0.0.1:3000/readyz          # 401 + WWW-Authenticate — так и должно быть
 ```
 
-Если порт 3000 на хосте занят: `MCP_PORT=3123 docker compose up -d` (healthcheck подстроится сам). 5. Подключение владельца до этапа 12 — только через туннель: `ssh -N -L 3000:127.0.0.1:3000 user@vps`, затем
-`claude mcp add --transport http bitrix24 http://127.0.0.1:3000/mcp` на своей машине. 6. Проверено 2026-09-24 на Linux-хосте с Docker: образ собирается, `setup`/`doctor --offline` в одноразовом контейнере
-проходят, сервер стартует на host-сети и становится `healthy`. С реальным порталом не проверялось.
+Если порт 3000 на хосте занят: `MCP_PORT=3123 docker compose up -d` и поправьте `proxy_pass` в nginx.
+
+6. Проверьте снаружи (ТЗ §17.6 п.7): TLS, отказ без токена, метаданные, затем удалённый smoke с настоящим токеном
+   от вашего AS (токен — через переменную окружения, не аргумент командной строки):
+
+```bash
+curl -i https://mcp.example.com/mcp -X POST -H 'content-type: application/json' -d '{}'   # ожидается 401 + WWW-Authenticate
+curl -s https://mcp.example.com/.well-known/oauth-protected-resource/mcp                  # JSON с authorization_servers
+MCP_SMOKE_TOKEN='<access token>' npm run mcp:smoke -- --transport http --url https://mcp.example.com/mcp
+```
+
+7. Подключите клиента: `docs/claude-code.md` (раздел «Удалённое подключение»), `docs/chatgpt.md`.
+   Сначала read-only, затем одно подтверждённое тестовое изменение (`docs/operations.md`).
 
 ## Что даёт `compose.yaml`
 
 - Непривилегированный пользователь `mcp`, `read_only` корневая ФС, `tmpfs` для `/tmp`, `cap_drop: ALL`,
   `no-new-privileges`; писать можно только в том `mcp-data` (SQLite, ключ, staging, копии).
-- `network_mode: host` и `MCP_HOST=127.0.0.1`: сервер слушает только loopback хоста, порт не публикуется; наружу — только через reverse proxy и только после этапа 12 (`MCP_AUTH_MODE=oauth`). Внешний интерфейс при `local` запрещён самой конфигурацией — это и есть причина host-сети до этапа 12.
+- `network_mode: host` и `MCP_HOST=127.0.0.1`: сервер слушает только loopback хоста; наружу — только через nginx.
+  Внешний интерфейс при `MCP_AUTH_MODE=local` запрещён самой конфигурацией.
 - `restart: unless-stopped`, healthcheck по `/healthz`, graceful shutdown по SIGTERM.
 - Один экземпляр: второй контейнер на той же базе запрещён (нет общей блокировки и лимитера — ТЗ §3.1).
 
-## Reverse proxy (заготовка для этапа 12)
+## Проверено / не проверено
 
-nginx перед сервером должен: терминировать TLS, проксировать `POST/GET/DELETE /mcp` с `proxy_buffering off`
-(SSE), передавать `Host` и `Origin` без изменений, ограничивать размер тела (`client_max_body_size 16m`),
-не открывать `/readyz` наружу. Конфигурация будет добавлена вместе с OAuth на этапе 12; до этого блок `server`
-с `location /mcp` не публикуйте.
+- Проверено 2026-09-24 на Linux-хосте с Docker: образ, `setup`/`doctor` одноразовым контейнером, старт на host-сети,
+  `healthy`, `initialize` через `/mcp` (режим `local`). OAuth-режим — автотестами с локальным издателем (JWKS по HTTP
+  на loopback), включая 401/403, привязку сессии, Origin и метаданные (`tests/security/mcp-oauth.test.ts`).
+- Не проверено: реальный домен и TLS, реальный AS (Keycloak и др.), регистрация клиента Claude Code/ChatGPT,
+  реальный портал. Эти пункты в отчёте приёмки — `not-run`.
 
 ## Резервные копии на VPS
 
