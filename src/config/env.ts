@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parse as parseDotenv } from 'dotenv';
+import { parseScannerUrl } from '../files/scanner.js';
 import { z } from 'zod';
 import { AppError, configError } from '../errors/app-error.js';
 import { registerSecret } from '../security/redaction.js';
@@ -126,6 +127,8 @@ const RawEnvSchema = z.object({
   MCP_ALLOWED_HOSTS: csv,
   /** ТЗ §8.6: входящие read-вызовы на оператора в минуту (write-подготовки ограничены в MutationExecutor: 10/мин). */
   MCP_INBOUND_READ_PER_MINUTE: intInRange('MCP_INBOUND_READ_PER_MINUTE', 1, 100_000).default(60),
+  /** Панель подтверждений и web-upload (ТЗ §4.5 /admin/*): отдельный вход по паролю. */
+  ADMIN_PANEL_ENABLED: strictBool('ADMIN_PANEL_ENABLED').default(false),
 
   BITRIX_CLIENT_ID: optionalString,
   BITRIX_CLIENT_SECRET: optionalString,
@@ -177,6 +180,7 @@ export interface AppConfig {
     /** Заполнено только при MCP_AUTH_MODE=oauth. */
     readonly auth: McpAuthSettings | undefined;
     readonly inboundReadPerMinute: number;
+    readonly adminPanelEnabled: boolean;
   };
   readonly bitrix: {
     readonly authMode: 'webhook' | 'oauth';
@@ -482,6 +486,10 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (raw.MAX_INLINE_FILE_BYTES > raw.MAX_UPLOAD_BYTES) {
     throw configError('MAX_INLINE_FILE_BYTES', 'не может превышать MAX_UPLOAD_BYTES');
   }
+  if (raw.UPLOAD_SCANNER_URL) parseScannerUrl(raw.UPLOAD_SCANNER_URL);
+  if (raw.ADMIN_PANEL_ENABLED && raw.MCP_TRANSPORT !== 'http') {
+    throw configError('ADMIN_PANEL_ENABLED', 'панель /admin работает только при MCP_TRANSPORT=http');
+  }
   if (raw.UPLOAD_SCAN_REQUIRED && !raw.UPLOAD_SCANNER_URL) {
     throw configError('UPLOAD_SCANNER_URL', 'обязателен при UPLOAD_SCAN_REQUIRED=true');
   }
@@ -517,6 +525,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       allowedOrigins: raw.MCP_ALLOWED_ORIGINS,
       auth: mcpAuth,
       inboundReadPerMinute: raw.MCP_INBOUND_READ_PER_MINUTE,
+      adminPanelEnabled: raw.ADMIN_PANEL_ENABLED,
     },
     bitrix: {
       authMode: raw.BITRIX_AUTH_MODE,

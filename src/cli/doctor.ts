@@ -7,6 +7,7 @@ import { existsSync, statSync } from 'node:fs';
 import { createApp } from '../app/container.js';
 import { listMethods } from '../bitrix/method-registry.js';
 import { describeConfig } from '../config/env.js';
+import { createScanner } from '../files/scanner.js';
 import { loadPolicies } from '../config/policy.js';
 import { AppError } from '../errors/app-error.js';
 import { createSilentLogger } from '../logging/logger.js';
@@ -107,6 +108,46 @@ async function main(): Promise<void> {
       : 'запись ВКЛЮЧЕНА, подтверждения обязательны',
   });
   checks.push({ name: 'modules', status: 'ok', detail: [...config.policy.enabledModules].join(', ') });
+
+  // Сканер файлов (ТЗ §8.5): при обязательной проверке — PING к clamd, иначе загрузка заблокирована.
+  if (!config.files.scanRequired) {
+    checks.push({
+      name: 'file scanner',
+      status: 'ok',
+      detail: config.files.scannerUrl
+        ? `настроен, не обязателен (${config.files.scannerUrl})`
+        : 'не требуется (UPLOAD_SCAN_REQUIRED=false)',
+    });
+  } else if (args.flags['offline']) {
+    checks.push({
+      name: 'file scanner',
+      status: 'skip',
+      detail: `--offline; настроен ${config.files.scannerUrl ?? '?'}`,
+    });
+  } else {
+    try {
+      await createScanner(config.files.scannerUrl)?.ping();
+      checks.push({
+        name: 'file scanner',
+        status: 'ok',
+        detail: `PONG от ${config.files.scannerUrl ?? '?'}`,
+      });
+    } catch (e) {
+      ready = false;
+      checks.push({
+        name: 'file scanner',
+        status: 'fail',
+        detail: `${config.files.scannerUrl ?? '?'}: ${(e as Error).message}; загрузка файлов заблокирована`,
+      });
+    }
+  }
+  checks.push({
+    name: 'admin panel',
+    status: 'ok',
+    detail: config.server.adminPanelEnabled
+      ? 'включена (/admin, пользователи — npm run admin:user)'
+      : 'выключена',
+  });
 
   if (!config.bitrix.webhook) {
     ready = false;

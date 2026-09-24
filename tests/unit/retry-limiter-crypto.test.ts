@@ -92,7 +92,7 @@ describe('crypto', () => {
 describe('database + audit', () => {
   it('миграции идемпотентны, транзакция откатывается', () => {
     const db = Database.open(':memory:');
-    expect(db.schemaVersion()).toBe(1);
+    expect(db.schemaVersion()).toBe(2);
     expect(() =>
       db.transaction(() => {
         db.run(

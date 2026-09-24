@@ -22,6 +22,7 @@ import {
   type VerifiedToken,
 } from '../auth/mcp-auth.js';
 import { isLoopbackHost, type McpAuthSettings } from '../config/env.js';
+import { registerAdminPanel } from '../http/admin.js';
 import { AppError } from '../errors/app-error.js';
 import { SERVER_VERSION } from '../version.js';
 import { createMcpServer } from './server.js';
@@ -80,6 +81,14 @@ export function buildHttpApp(app: AppContainer, opts: BuildHttpOptions = {}): Fa
     ...(adapterOrigins ? { allowedOrigins: adapterOrigins } : {}),
   });
   const sessions = new Map<string, Session>();
+
+  // Панель подтверждений и web-upload (ТЗ §4.5): отдельный вход по паролю, не по MCP-токену.
+  if (cfg.adminPanelEnabled) {
+    registerAdminPanel(fastify, app, {
+      publicOrigin: auth?.publicOrigin,
+      secureCookies: (cfg.publicUrl ?? '').startsWith('https://'),
+    });
+  }
 
   const sendAuthError = (reply: FastifyReply, err: McpAuthError) => {
     if (auth && err.status !== 503) reply.header('WWW-Authenticate', wwwAuthenticate(auth, err));

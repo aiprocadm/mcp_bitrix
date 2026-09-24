@@ -115,4 +115,28 @@ CREATE TABLE IF NOT EXISTS capabilities_cache (
 );
 `,
   },
+  {
+    id: 2,
+    name: 'scan-status-and-admin-panel',
+    sql: `
+ALTER TABLE file_manifests ADD COLUMN scan_status TEXT NOT NULL DEFAULT 'skipped';
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  name TEXT PRIMARY KEY,
+  principal_id TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id_hash TEXT PRIMARY KEY,
+  user_name TEXT NOT NULL,
+  csrf TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+`,
+  },
 ];

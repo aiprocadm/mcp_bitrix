@@ -373,7 +373,7 @@ describe('disk_upload_file', () => {
   it('fileToken из staging + conflictPolicy=rename: портал переименовал → success с warning', async () => {
     const path = `${t.config.storage.uploadRoot}/существующий.txt`;
     writeFileSync(path, 'новое содержимое\n');
-    const manifest = t.app.files.stageFromPath(path, 'owner');
+    const manifest = await t.app.files.stageFromPath(path, 'owner');
     const { done } = await approved('disk_upload_file', {
       folderId: 12,
       fileToken: manifest.token,
@@ -390,7 +390,7 @@ describe('disk_upload_file', () => {
   it('T26: staged-файл подменён после подтверждения → UNSAFE_FILE, загрузки нет, операция failed', async () => {
     const path = `${t.config.storage.uploadRoot}/mcp-tamper.txt`;
     writeFileSync(path, 'исходное\n');
-    const manifest = t.app.files.stageFromPath(path, 'owner');
+    const manifest = await t.app.files.stageFromPath(path, 'owner');
     const args = { folderId: 12, fileToken: manifest.token, idempotencyKey: randomUUID() };
     const prep = await call('disk_upload_file', args);
     const operationId = opId(prep);

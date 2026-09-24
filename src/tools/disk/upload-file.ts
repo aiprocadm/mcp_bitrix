@@ -108,7 +108,7 @@ export const diskUploadFileTool = defineTool({
   handler: async (args, ctx) => {
     // 1. Файл: манифест из staging (токен) либо inline → staging. Хеш — часть плана.
     const manifest: FileManifest = args.inline
-      ? ctx.files.stageInline(args.inline.contentBase64, args.inline.fileName, ctx.principal.id)
+      ? await ctx.files.stageInline(args.inline.contentBase64, args.inline.fileName, ctx.principal.id)
       : ctx.files.resolve(args.fileToken ?? '', ctx.principal.id);
     const targetName = sanitizeFileName(args.name ?? manifest.originalName);
     // 2. Папка и конфликт имени — до плана.
