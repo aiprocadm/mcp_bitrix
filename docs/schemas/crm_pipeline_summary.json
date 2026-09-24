@@ -1,7 +1,7 @@
 {
-  "name": "crm_search_records",
-  "title": "Поиск записей CRM",
-  "description": "Найти записи CRM по части названия/имени (query), телефону (phone) или email. Использовать, когда пользователь называет клиента словами, а не ID: «найди компанию Ромашка», «есть ли контакт с телефоном…». Возвращает кандидатов с основанием совпадения — выбор среди них делает пользователь. Телефон/email ищутся среди лидов, контактов и компаний (сделки — только по названию). Запрос короче 3 символов отклоняется как слишком широкий.",
+  "name": "crm_pipeline_summary",
+  "title": "Сводка по воронке сделок",
+  "description": "Количество сделок и суммы по стадиям одной воронки за период по выбранному полю даты (создание, закрытие, начало, изменение), опционально по ответственному. Использовать для вопросов «сколько сделок и на какую сумму на каждой стадии». Считается по ограниченной выборке (maxRecords, лимит времени): ответ сообщает scannedCount, hasMore и полноту. Суммы в разных валютах показываются раздельно, не складываются. Это снимок текущих стадий, не историческая конверсия.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,55 +12,50 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entityTypes": {
-        "default": [
-          "deal",
-          "lead",
-          "contact",
-          "company"
+      "categoryId": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1000000,
+        "description": "Воронка (0 — общая); список — crm_stages_and_statuses"
+      },
+      "dateField": {
+        "type": "string",
+        "enum": [
+          "DATE_CREATE",
+          "CLOSEDATE",
+          "BEGINDATE",
+          "DATE_MODIFY"
         ],
-        "description": "Где искать; по умолчанию везде",
-        "minItems": 1,
-        "maxItems": 4,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "deal",
-            "lead",
-            "contact",
-            "company"
-          ],
-          "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-        }
+        "description": "Поле даты для периода: DATE_CREATE, CLOSEDATE, BEGINDATE или DATE_MODIFY"
       },
-      "query": {
-        "description": "Часть названия сделки/лида/компании или фамилии/имени контакта",
+      "from": {
         "type": "string",
-        "minLength": 1,
-        "maxLength": 100
+        "maxLength": 40,
+        "description": "Начало периода (включительно)"
       },
-      "phone": {
+      "to": {
         "type": "string",
-        "minLength": 5,
-        "maxLength": 30,
-        "pattern": "^[+\\d][\\d\\s()-]*$"
+        "maxLength": 40,
+        "description": "Конец периода (включительно)"
       },
-      "email": {
-        "type": "string",
-        "maxLength": 120,
-        "format": "email",
-        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      "assignedById": {
+        "description": "Только сделки этого ответственного",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
       },
-      "pageSize": {
-        "description": "Максимум кандидатов на тип сущности (по умолчанию 20)",
+      "maxRecords": {
+        "description": "Предел просмотренных сделок; по умолчанию MAX_AGGREGATION_RECORDS",
         "type": "integer",
         "minimum": 1,
-        "maximum": 50
+        "maximum": 50000
       }
     },
     "required": [
-      "entityTypes"
+      "categoryId",
+      "dateField",
+      "from",
+      "to"
     ],
     "additionalProperties": false
   },
@@ -77,61 +72,143 @@
           "data": {
             "type": "object",
             "properties": {
-              "candidates": {
+              "categoryId": {
+                "type": "number"
+              },
+              "categoryName": {
+                "type": "string"
+              },
+              "dateField": {
+                "type": "string",
+                "enum": [
+                  "DATE_CREATE",
+                  "CLOSEDATE",
+                  "BEGINDATE",
+                  "DATE_MODIFY"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "assignedById": {
+                "type": "number"
+              },
+              "asOf": {
+                "type": "string"
+              },
+              "scannedCount": {
+                "type": "number"
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "stoppedBy": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "maxRecords",
+                  "timeLimit"
+                ]
+              },
+              "stages": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "entityType": {
-                      "type": "string",
-                      "enum": [
-                        "deal",
-                        "lead",
-                        "contact",
-                        "company"
-                      ],
-                      "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-                    },
-                    "id": {
-                      "type": "number"
-                    },
-                    "title": {
+                    "stageId": {
                       "type": "string"
                     },
-                    "matchedBy": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "semantics": {
                       "type": "string",
                       "enum": [
-                        "title",
-                        "name",
-                        "phone",
-                        "email"
+                        "P",
+                        "S",
+                        "F"
                       ]
                     },
-                    "record": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {}
+                    "count": {
+                      "type": "number"
+                    },
+                    "sums": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "currency": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "currency",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
-                    "entityType",
-                    "id",
-                    "title",
-                    "matchedBy",
-                    "record"
+                    "stageId",
+                    "name",
+                    "semantics",
+                    "count",
+                    "sums"
                   ],
                   "additionalProperties": false
                 }
               },
-              "returnedCount": {
-                "type": "number"
+              "totals": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "number"
+                  },
+                  "sums": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "currency": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "currency",
+                        "amount"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "sums"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
-              "candidates",
-              "returnedCount"
+              "categoryId",
+              "dateField",
+              "from",
+              "to",
+              "asOf",
+              "scannedCount",
+              "hasMore",
+              "stoppedBy",
+              "stages",
+              "totals"
             ],
             "additionalProperties": false
           },

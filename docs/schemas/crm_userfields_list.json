@@ -1,7 +1,7 @@
 {
-  "name": "crm_search_records",
-  "title": "Поиск записей CRM",
-  "description": "Найти записи CRM по части названия/имени (query), телефону (phone) или email. Использовать, когда пользователь называет клиента словами, а не ID: «найди компанию Ромашка», «есть ли контакт с телефоном…». Возвращает кандидатов с основанием совпадения — выбор среди них делает пользователь. Телефон/email ищутся среди лидов, контактов и компаний (сделки — только по названию). Запрос короче 3 символов отклоняется как слишком широкий.",
+  "name": "crm_userfields_list",
+  "title": "Пользовательские поля CRM",
+  "description": "Пользовательские поля UF_CRM_* сущности CRM (сделка, лид, контакт, компания) с подписями, типами, обязательностью и вариантами списков. Использовать, когда нужно понять, что означает поле UF_CRM_… или какие значения допустимы в списке; для полной схемы вместе со стандартными полями — crm_fields_get. Смарт-процессы (userfieldconfig) появятся отдельным срезом.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,55 +12,19 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entityTypes": {
-        "default": [
+      "entityType": {
+        "type": "string",
+        "enum": [
           "deal",
           "lead",
           "contact",
           "company"
         ],
-        "description": "Где искать; по умолчанию везде",
-        "minItems": 1,
-        "maxItems": 4,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "deal",
-            "lead",
-            "contact",
-            "company"
-          ],
-          "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-        }
-      },
-      "query": {
-        "description": "Часть названия сделки/лида/компании или фамилии/имени контакта",
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 100
-      },
-      "phone": {
-        "type": "string",
-        "minLength": 5,
-        "maxLength": 30,
-        "pattern": "^[+\\d][\\d\\s()-]*$"
-      },
-      "email": {
-        "type": "string",
-        "maxLength": 120,
-        "format": "email",
-        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-      },
-      "pageSize": {
-        "description": "Максимум кандидатов на тип сущности (по умолчанию 20)",
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 50
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
       }
     },
     "required": [
-      "entityTypes"
+      "entityType"
     ],
     "additionalProperties": false
   },
@@ -77,61 +41,81 @@
           "data": {
             "type": "object",
             "properties": {
-              "candidates": {
+              "entityType": {
+                "type": "string",
+                "enum": [
+                  "deal",
+                  "lead",
+                  "contact",
+                  "company"
+                ],
+                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+              },
+              "count": {
+                "type": "number"
+              },
+              "fields": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "entityType": {
-                      "type": "string",
-                      "enum": [
-                        "deal",
-                        "lead",
-                        "contact",
-                        "company"
-                      ],
-                      "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-                    },
-                    "id": {
-                      "type": "number"
-                    },
-                    "title": {
+                    "fieldName": {
                       "type": "string"
                     },
-                    "matchedBy": {
-                      "type": "string",
-                      "enum": [
-                        "title",
-                        "name",
-                        "phone",
-                        "email"
-                      ]
+                    "type": {
+                      "type": "string"
                     },
-                    "record": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {}
+                    "label": {
+                      "type": "string"
+                    },
+                    "multiple": {
+                      "type": "boolean"
+                    },
+                    "mandatory": {
+                      "type": "boolean"
+                    },
+                    "sort": {
+                      "type": "number"
+                    },
+                    "xmlId": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ID": {
+                            "type": "string"
+                          },
+                          "VALUE": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ID",
+                          "VALUE"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
-                    "entityType",
-                    "id",
-                    "title",
-                    "matchedBy",
-                    "record"
+                    "fieldName",
+                    "type",
+                    "label",
+                    "multiple",
+                    "mandatory",
+                    "sort"
                   ],
                   "additionalProperties": false
                 }
-              },
-              "returnedCount": {
-                "type": "number"
               }
             },
             "required": [
-              "candidates",
-              "returnedCount"
+              "entityType",
+              "count",
+              "fields"
             ],
             "additionalProperties": false
           },

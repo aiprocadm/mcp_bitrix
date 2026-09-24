@@ -6,6 +6,15 @@ import { crmCreateRecordTool } from './crm/create-record.js';
 import { crmFieldsGetTool } from './crm/fields-get.js';
 import { crmGetRecordTool } from './crm/get-record.js';
 import { crmListRecordsTool } from './crm/list-records.js';
+import { crmPipelineSummaryTool } from './crm/pipeline-summary.js';
+import {
+  crmActivitiesListTool,
+  crmDealProductsGetTool,
+  crmStageHistoryTool,
+  crmTimelineCommentsListTool,
+  crmUserfieldsListTool,
+} from './crm/related-read.js';
+import { crmDealProductsReplaceTool, crmTimelineCommentAddTool } from './crm/related-write.js';
 import { crmSearchRecordsTool } from './crm/search-records.js';
 import { crmStagesAndStatusesTool } from './crm/stages.js';
 import { crmUpdateRecordTool } from './crm/update-record.js';
@@ -37,7 +46,15 @@ export function allTools(): readonly ToolDefinition[] {
     crmCreateRecordTool,
     crmUpdateRecordTool,
     crmFieldsGetTool,
+    crmUserfieldsListTool,
+    crmActivitiesListTool,
+    crmPipelineSummaryTool,
+    crmStageHistoryTool,
     crmStagesAndStatusesTool,
+    crmTimelineCommentAddTool,
+    crmTimelineCommentsListTool,
+    crmDealProductsGetTool,
+    crmDealProductsReplaceTool,
     // §9.8 задачи (MVP)
     taskCreateTool,
     taskGetTool,
