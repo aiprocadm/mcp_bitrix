@@ -1,7 +1,7 @@
 {
-  "name": "crm_get_record",
-  "title": "Карточка записи CRM",
-  "description": "Карточка записи CRM (сделка, лид, контакт, компания) по ID в рамках доступных полей. Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для последующих изменений (expectedStateHash в crm_update_record). Связанные блоки (дела, комментарии, товары, реквизиты) через include появятся следующими срезами; бинарные вложения не скачиваются.",
+  "name": "crm_search_records",
+  "title": "Поиск записей CRM",
+  "description": "Найти записи CRM по части названия/имени (query), телефону (phone) или email. Использовать, когда пользователь называет клиента словами, а не ID: «найди компанию Ромашка», «есть ли контакт с телефоном…». Возвращает кандидатов с основанием совпадения — выбор среди них делает пользователь. Телефон/email ищутся среди лидов, контактов и компаний (сделки — только по названию). Запрос короче 3 символов отклоняется как слишком широкий.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,35 +12,56 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "entityType": {
-        "type": "string",
-        "enum": [
+      "entityTypes": {
+        "default": [
           "deal",
           "lead",
           "contact",
           "company"
         ],
-        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
-      },
-      "id": {
-        "type": "integer",
-        "exclusiveMinimum": 0,
-        "maximum": 9007199254740991,
-        "description": "ID записи"
-      },
-      "select": {
-        "description": "Ограничить набор полей; по умолчанию все доступные",
-        "maxItems": 100,
+        "description": "Где искать; по умолчанию везде",
+        "minItems": 1,
+        "maxItems": 4,
         "type": "array",
         "items": {
           "type": "string",
-          "maxLength": 100
+          "enum": [
+            "deal",
+            "lead",
+            "contact",
+            "company"
+          ],
+          "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
         }
+      },
+      "query": {
+        "description": "Часть названия сделки/лида/компании или фамилии/имени контакта",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "phone": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 30,
+        "pattern": "^[+\\d][\\d\\s()\\-]*$"
+      },
+      "email": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 120,
+        "format": "email",
+        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      },
+      "pageSize": {
+        "description": "Максимум кандидатов на тип сущности (по умолчанию 20)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
       }
     },
     "required": [
-      "entityType",
-      "id"
+      "entityTypes"
     ],
     "additionalProperties": false
   },
@@ -57,39 +78,61 @@
           "data": {
             "type": "object",
             "properties": {
-              "entityType": {
-                "type": "string",
-                "enum": [
-                  "deal",
-                  "lead",
-                  "contact",
-                  "company"
-                ],
-                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "entityType": {
+                      "type": "string",
+                      "enum": [
+                        "deal",
+                        "lead",
+                        "contact",
+                        "company"
+                      ],
+                      "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+                    },
+                    "id": {
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "matchedBy": {
+                      "type": "string",
+                      "enum": [
+                        "title",
+                        "name",
+                        "phone",
+                        "email"
+                      ]
+                    },
+                    "record": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "entityType",
+                    "id",
+                    "title",
+                    "matchedBy",
+                    "record"
+                  ],
+                  "additionalProperties": false
+                }
               },
-              "id": {
+              "returnedCount": {
                 "type": "number"
-              },
-              "title": {
-                "type": "string"
-              },
-              "record": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
-              },
-              "stateHash": {
-                "type": "string"
               }
             },
             "required": [
-              "entityType",
-              "id",
-              "title",
-              "record",
-              "stateHash"
+              "candidates",
+              "returnedCount"
             ],
             "additionalProperties": false
           },

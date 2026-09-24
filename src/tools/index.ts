@@ -6,6 +6,9 @@ import { crmCreateRecordTool } from './crm/create-record.js';
 import { crmFieldsGetTool } from './crm/fields-get.js';
 import { crmGetRecordTool } from './crm/get-record.js';
 import { crmListRecordsTool } from './crm/list-records.js';
+import { crmSearchRecordsTool } from './crm/search-records.js';
+import { crmStagesAndStatusesTool } from './crm/stages.js';
+import { crmUpdateRecordTool } from './crm/update-record.js';
 import { capabilitiesTool } from './system/capabilities.js';
 import { connectionInfoTool } from './system/connection-info.js';
 import { operationStatusTool } from './system/operation-status.js';
@@ -27,11 +30,14 @@ export function allTools(): readonly ToolDefinition[] {
     capabilitiesTool,
     restCallTool,
     operationStatusTool,
-    // §9.4 CRM (MVP: сделки)
+    // §9.4 CRM: классические сущности deal|lead|contact|company
     crmListRecordsTool,
     crmGetRecordTool,
+    crmSearchRecordsTool,
     crmCreateRecordTool,
+    crmUpdateRecordTool,
     crmFieldsGetTool,
+    crmStagesAndStatusesTool,
     // §9.8 задачи (MVP)
     taskCreateTool,
     taskGetTool,

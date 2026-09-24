@@ -12,7 +12,7 @@
 | @fastify/multipart                                     | 10.1.2                           | web-upload панели `/admin/uploads` (один файл, лимит `MAX_UPLOAD_BYTES`)                   |
 | Fastify                                                | 5.12.5                           | `/healthz`, `/readyz`, `/mcp` в тестах                                                     |
 | TypeScript                                             | 5.9.3                            | `tsc --noEmit`, сборка `dist/`                                                             |
-| Vitest                                                 | 5.0.1                            | 206 тестов                                                                                 |
+| Vitest                                                 | 5.0.1                            | 215 тестов                                                                                 |
 | SQLite                                                 | встроенный `node:sqlite` Node 24 | миграции, WAL, транзакции в тестах                                                         |
 
 ## Клиенты MCP

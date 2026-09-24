@@ -1,7 +1,7 @@
 {
   "name": "crm_fields_get",
   "title": "Схема полей CRM",
-  "description": "Схема полей сущности CRM с портала: имя, тип, обязательность, только-чтение, множественность, варианты списков. Использовать перед crm_create_record и при ошибке VALIDATION_ERROR/UNKNOWN_FIELD, чтобы узнать точные имена и обязательные поля (включая пользовательские UF_CRM_*). В MVP поддерживается только entityType=deal.",
+  "description": "Схема полей сущности CRM (сделка, лид, контакт, компания) с портала: имя, тип, обязательность, только-чтение, множественность, варианты списков. Использовать перед crm_create_record/crm_update_record и при ошибке VALIDATION_ERROR/UNKNOWN_FIELD, чтобы узнать точные имена и обязательные поля (включая пользовательские UF_CRM_*).",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -14,8 +14,13 @@
     "properties": {
       "entityType": {
         "type": "string",
-        "const": "deal",
-        "description": "Тип сущности; в MVP только deal"
+        "enum": [
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
       },
       "refresh": {
         "default": false,
@@ -44,7 +49,13 @@
             "properties": {
               "entityType": {
                 "type": "string",
-                "const": "deal"
+                "enum": [
+                  "deal",
+                  "lead",
+                  "contact",
+                  "company"
+                ],
+                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
               },
               "count": {
                 "type": "number"

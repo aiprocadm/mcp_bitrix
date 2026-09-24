@@ -80,6 +80,13 @@ export const CREATE_ANNOTATIONS: ToolAnnotations = {
   idempotentHint: false,
   openWorldHint: true,
 };
+/** Изменение существующей записи: не разрушительно, повтор с тем же approvalId безопасен (replay). */
+export const UPDATE_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
 export const DESTRUCTIVE_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: true,

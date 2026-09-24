@@ -15,6 +15,7 @@ import {
   legacyListPage,
   legacyOk,
 } from '../helpers/mock-bitrix.js';
+import { STATUS_LISTS } from '../helpers/mock-crm.js';
 
 interface Env {
   success: boolean;
@@ -35,6 +36,7 @@ function setup(overrides: Record<string, string> = {}) {
   t = createTestApp(overrides);
   t.bitrix
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
+    .on('crm.status.list', legacyOk(STATUS_LISTS['DEAL_STAGE']))
     .on('crm.deal.list', (c) => legacyListPage(ALL_DEALS, Number(c.body['start'] ?? 0), 50))
     .on('crm.deal.get', (c) => {
       const id = Number(c.body['id']);
@@ -66,9 +68,11 @@ describe('crm_fields_get', () => {
     expect(t.bitrix.callsTo('crm.deal.fields')).toHaveLength(2);
   });
 
-  it('entityType кроме deal не рекламируется и отклоняется', async () => {
-    const r = await client.callTool({ name: 'crm_fields_get', arguments: { entityType: 'lead' } });
-    expect(r.isError).toBe(true);
+  it('entityType вне классических сущностей (smart, invoice) отклоняется схемой', async () => {
+    for (const entityType of ['smart', 'invoice', 'DEAL']) {
+      const r = await client.callTool({ name: 'crm_fields_get', arguments: { entityType } });
+      expect(r.isError, entityType).toBe(true);
+    }
   });
 });
 

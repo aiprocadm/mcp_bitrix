@@ -22,6 +22,7 @@ import {
   taskRecord,
   tasks,
 } from '../helpers/mock-bitrix.js';
+import { STATUS_LISTS } from '../helpers/mock-crm.js';
 
 const LIVE_ENV = {
   LIVE_TESTS_ENABLED: 'true',
@@ -48,6 +49,8 @@ function portal(overrides: Record<string, string> = {}) {
     .on('scope', legacyOk(['crm', 'task', 'im', 'disk', 'calendar']))
     .on('method.get', legacyOk({ isExisting: true, isAvailable: true }))
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
+    // срез 10: STAGE_ID сверяется со справочником стадий до плана (INVALID_STAGE)
+    .on('crm.status.list', legacyOk(STATUS_LISTS['DEAL_STAGE']))
     .on('crm.deal.list', (c) => legacyListPage(ALL, Number(c.body['start'] ?? 0), 50))
     .on('crm.deal.get', (c) =>
       legacyOk(

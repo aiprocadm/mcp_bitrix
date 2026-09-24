@@ -1,6 +1,6 @@
 # Отчёт проверки (ТЗ §20)
 
-Обновлено: 2026-09-24, срез 9 (этапы 1–12). Среда: Linux x64, Node 24.18.0, без доступа к реальному порталу.
+Обновлено: 2026-09-24, срез 10 (этапы 1–12, этап 13 в работе). Среда: Linux x64, Node 24.18.0, без доступа к реальному порталу.
 
 Статусы: `passed` — проверено в этой среде; `mock` — проверено на имитации Bitrix24 с реальной формой ответов
 (портал не участвовал); `not-run` — не выполнялось; `blocked` — невозможно без внешнего условия
@@ -45,9 +45,9 @@
 | Remote MCP smoke                                     | passed на loopback с локальным издателем (`mcp:smoke --transport http --url … --token-env`); на реальном домене — not-run                                                                                                                                                                                                            |
 | ChatGPT                                              | blocked (домен, HTTPS, authorization server, аккаунт заказчика) — `docs/chatgpt.md`                                                                                                                                                                                                                                                  |
 
-## Полная версия (§20.3) — этап 13, не начата
+## Полная версия (§20.3) — этап 13, в работе (срез 10)
 
-Реализованы 15 инструментов (11 MVP + `crm_fields_get`, `task_list`, `bitrix_server_version`, `bitrix_capabilities`, `operation_status`). Остальные строки §9 — `n/a` для текущего объёма, заглушек нет.
+Реализованы 18 инструментов из 105 строк §9: 11 MVP + `crm_fields_get`, `task_list`, `bitrix_server_version`, `bitrix_capabilities`, `operation_status` + срез 10: `crm_update_record`, `crm_stages_and_statuses`, `crm_search_records`; `crm_list_records`/`crm_get_record`/`crm_fields_get`/`crm_create_record` работают для deal|lead|contact|company. Каждый инструмент — код, схема, реестр методов с источником, тесты на mock (`integration/crm-entities.test.ts`); write-сценарии на реальном портале — `not-run`. Остальные строки §9 — `n/a` для текущего объёма, заглушек нет. Факт документации: классические `crm.lead/contact/company.*` помечены Bitrix как «развитие остановлено» в пользу `crm.item.*` — перенос на универсальный адаптер запланирован в следующем CRM-срезе.
 
 ## Тест-кейсы §19.2 — полная таблица
 
@@ -66,7 +66,7 @@
 | T11 | raw write/batch/casing/path             | passed            | `integration/mcp-inmemory.test.ts`                                                                                                                                                                  |
 | T12 | `confirm:true` без операции             | passed            | `security/approvals.test.ts`                                                                                                                                                                        |
 | T13 | повтор approval после успеха            | passed            | там же + `live-smoke.test.ts`                                                                                                                                                                       |
-| T14 | чужой principal/изменённые args         | passed            | там же                                                                                                                                                                                              |
+| T14 | чужой principal/изменённые args         | passed            | там же; `crm-entities.test.ts`: изменение записи между подтверждением и записью → CONFLICT в precheck, операция `failed`                                                                            |
 | T15 | объект изменился после подготовки       | passed            | там же (precheck) + Диск (`chat-calendar-disk.test.ts`)                                                                                                                                             |
 | T16 | рестарт при executing                   | passed            | там же                                                                                                                                                                                              |
 | T17 | OAuth refresh                           | частично          | «один refresh» в клиенте (`client.test.ts`); OAuth-провайдер — этап 13                                                                                                                              |
@@ -83,7 +83,7 @@
 | T28 | календарь: интервал, зона, DST, all-day | passed            | `unit/calendar-time.test.ts`, `chat-calendar-disk.test.ts`                                                                                                                                          |
 | T29 | новая карточка задач                    | n/a               | комментарии задач — полная версия                                                                                                                                                                   |
 | T30 | задача требует результат                | n/a               | `task_complete` — полная версия                                                                                                                                                                     |
-| T31 | обязательное UF-поле CRM                | passed            | `unit/deal-fields.test.ts`, `crm-deals.test.ts`; live — not-run                                                                                                                                     |
+| T31 | обязательное UF-поле CRM                | passed            | `unit/deal-fields.test.ts`, `crm-deals.test.ts`, `crm-entities.test.ts` (лид/контакт/компания, INVALID_STAGE); live — not-run                                                                       |
 | T32 | замена товаров пустым списком           | n/a               | полная версия                                                                                                                                                                                       |
 | T33 | агрегация по воронке                    | n/a               | полная версия                                                                                                                                                                                       |
 | T34 | счёт без товаров                        | n/a               | полная версия                                                                                                                                                                                       |
