@@ -4,6 +4,7 @@
  * отсутствие модуля → FEATURE_UNAVAILABLE. Группы: projectOnly локально (PROJECT не фильтруется порталом),
  * участники с ролями, закрытая группа → GROUP_ACCESS_DENIED.
  */
+import { dispatch } from '../../src/mcp/register-tools.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Client } from '@modelcontextprotocol/client';
 import { connectInMemory, createTestApp, structured, type TestApp } from '../helpers/app.js';
@@ -192,6 +193,31 @@ describe('telephony_calls_list', () => {
       if (!cursor) break;
     }
     expect(ids).toEqual(Array.from({ length: 70 }, (_, i) => i + 1));
+  });
+
+  it('ревью: operator без профиля выдачи не получает полные номера (ACCESS_DENIED до обращения к порталу)', async () => {
+    const tool = t.app.tools.find((d) => d.name === 'telephony_calls_list');
+    if (!tool) throw new Error('нет инструмента');
+    const before = t.bitrix.callsTo('voximplant.statistic.get').length;
+    const env = await dispatch(
+      tool,
+      { from: '2026-09-01', to: '2026-09-30', includePhoneNumbers: true },
+      t.app,
+      undefined,
+      { id: 'op', role: 'operator', source: 'local' },
+    );
+    expect(env.success).toBe(false);
+    if (!env.success) {
+      expect(env.error.code).toBe('ACCESS_DENIED');
+      expect(env.error.details.reason).toBe('PERSONAL_DATA_POLICY');
+    }
+    expect(t.bitrix.callsTo('voximplant.statistic.get')).toHaveLength(before);
+    const masked = await dispatch(tool, { from: '2026-09-01', to: '2026-09-30' }, t.app, undefined, {
+      id: 'op',
+      role: 'operator',
+      source: 'local',
+    });
+    expect(masked.success).toBe(true);
   });
 
   it('модуль телефонии отсутствует → FEATURE_UNAVAILABLE; обратный период → ошибка схемы; модуль выключен → FEATURE_UNAVAILABLE', async () => {

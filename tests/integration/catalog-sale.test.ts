@@ -563,6 +563,27 @@ describe('catalog_price_set: decimal, валюта, тип цены, add/update'
     expect(missing.error?.code).toBe('NOT_FOUND');
   });
 
+  it('ревью: план «создать цену» без expectedStateHash, цену создали до повтора с approvalId → CONFLICT PLAN_CHANGED, update не вызывается', async () => {
+    const args = {
+      productId: 12,
+      productKind: 'offer',
+      priceTypeId: 2,
+      amount: '5',
+      currency: 'USD',
+      idempotencyKey: randomUUID(),
+    };
+    const prep = await call('catalog_price_set', args);
+    expect(prep.error?.details['plan']).toMatchObject({ details: { mode: 'create' } });
+    const operationId = prep.error?.details['operationId'] as string;
+    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    state.prices.push({ id: 778, productId: 12, catalogGroupId: 2, price: 90, currency: 'USD' });
+    const run = await call('catalog_price_set', { ...args, approvalId: operationId });
+    expect(run.error?.code).toBe('CONFLICT');
+    expect(run.error?.details['reason']).toBe('PLAN_CHANGED');
+    expect(t.bitrix.callsTo('catalog.price.update')).toHaveLength(0);
+    expect(t.bitrix.callsTo('catalog.price.add')).toHaveLength(0);
+  });
+
   it('CONFLICT: stateHash из dryRun устарел до плана; цену создали/изменили между подтверждением и записью', async () => {
     const dry = await call('catalog_price_set', {
       productId: 10,

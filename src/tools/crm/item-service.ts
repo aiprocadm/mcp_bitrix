@@ -15,7 +15,17 @@ import type { JsonObject, JsonValue } from '../../bitrix/legacy-adapter.js';
 import type { PageResult } from '../../bitrix/pagination.js';
 import { AppError } from '../../errors/app-error.js';
 import { stateHash } from '../../security/idempotency.js';
-import { asText, idOf, isObj, legacyListPage, num, outcomeUnknown, own, upstreamShapeError, yn } from '../shared.js';
+import {
+  asText,
+  idOf,
+  isObj,
+  legacyListPage,
+  num,
+  outcomeUnknown,
+  own,
+  upstreamShapeError,
+  yn,
+} from '../shared.js';
 import type { ToolContext } from '../types.js';
 import { listCategories, listStatuses, type StatusItem } from './crm-service.js';
 import { parseItemFieldsResult, type ItemFieldsMeta } from './item-fields.js';

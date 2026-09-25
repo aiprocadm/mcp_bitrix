@@ -248,7 +248,8 @@ export function validateTaskOrder(
 ): Record<string, 'asc' | 'desc'> {
   const out: Record<string, 'asc' | 'desc'> = {};
   for (const [field, dir] of Object.entries(order)) {
-    if (!own(meta, field)) throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field))
+      throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     const d = String(dir).toLowerCase();
     if (d !== 'asc' && d !== 'desc') throw bad(`order.${field}`, 'допустимо asc или desc');
     out[field] = d;

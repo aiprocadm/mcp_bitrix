@@ -61,7 +61,7 @@ export const telephonyCallsListTool = defineTool({
     'История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, ' +
     'привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». ' +
     'Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); ' +
-    'номер абонента маскируется, если не запрошен includePhoneNumbers=true. Полнота внешней АТС не гарантируется.',
+    'номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.',
   operation: 'read',
   annotations: READ_ANNOTATIONS,
   requiresBitrix: true,
@@ -104,6 +104,20 @@ export const telephonyCallsListTool = defineTool({
     total: z.number().nullable(),
   }),
   handler: async (args, ctx) => {
+    // Полный номер абонента — персональные данные (§8.4): флаг модели сам по себе не расширяет выдачу.
+    // Нужна роль administrator либо явный профиль выдачи telephony.calls с полем phoneNumber.
+    if (
+      args.includePhoneNumbers &&
+      ctx.principal.role !== 'administrator' &&
+      !ctx.outputPolicy.allowedFields(ctx.principal.role, 'telephony', 'calls')?.has('phoneNumber')
+    ) {
+      throw new AppError('ACCESS_DENIED', 'Полные номера абонентов доступны только по политике выдачи', {
+        field: 'includePhoneNumbers',
+        reason: 'PERSONAL_DATA_POLICY',
+        nextAction:
+          'Повторите без includePhoneNumbers (номера маскируются) или добавьте phoneNumber в профиль telephony.calls',
+      });
+    }
     const pageSize = pageSizeOf(ctx, args.pageSize);
     const filter: JsonObject = { '>=CALL_START_DATE': args.from, '<=CALL_START_DATE': args.to };
     if (args.userId !== undefined) filter['PORTAL_USER_ID'] = args.userId;

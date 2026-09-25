@@ -229,7 +229,14 @@ async function findSentMessage(ctx: ToolContext, chatId: number, text: string): 
   const found = messages
     .filter(isObj)
     .map(chatMessage)
-    .filter((m): m is MessageOut => m !== undefined && !m.system && m.text.trim() === text.trim())
+    // Только собственные сообщения владельца вебхука: такой же текст другого участника — не наш messageId.
+    .filter(
+      (m): m is MessageOut =>
+        m !== undefined &&
+        !m.system &&
+        (ctx.bitrix.auth.identityUserId === undefined || m.authorId === ctx.bitrix.auth.identityUserId) &&
+        m.text.trim() === text.trim(),
+    )
     .sort((a, b) => b.id - a.id)[0];
   return found?.id;
 }

@@ -388,6 +388,26 @@ describe('чек-листы (позиционные параметры стар�
     });
   });
 
+  it('ревью: родителя удалили между подтверждением и записью → CONFLICT PARENT_NOT_FOUND в precheck, пункт не создан', async () => {
+    await start();
+    const args = { taskId: 100, title: 'Подписать договор', parentId: 431, idempotencyKey: randomUUID() };
+    const prep = await call('task_checklist_add', args);
+    const operationId = prep.error?.details['operationId'] as string;
+    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    // Обработчик при повторе ещё видит родителя; удаление приходится на окно перед записью (чтение в precheck).
+    const reads = t.bitrix.callsTo('task.checklistitem.getlist').length;
+    t.bitrix.on('task.checklistitem.getlist', (c) => {
+      const [taskId] = Object.values(c.body);
+      if (t.bitrix.callsTo('task.checklistitem.getlist').length > reads + 1)
+        portal.checklist = portal.checklist.filter((i) => Number(i['ID']) !== 431);
+      return legacyOk(portal.checklist.filter((i) => String(i['TASK_ID']) === String(taskId)));
+    });
+    const done = await call('task_checklist_add', { ...args, approvalId: operationId });
+    expect(done.error?.code).toBe('CONFLICT');
+    expect(done.error?.details['reason']).toBe('PARENT_NOT_FOUND');
+    expect(t.bitrix.callsTo('task.checklistitem.add')).toHaveLength(0);
+  });
+
   it('task_checklist_update: тело {TASKID, ITEMID, FIELDS}; CONFLICT по stateHash пункта; result=null — успех', async () => {
     await start();
     const list = await call('task_checklist_get', { taskId: 100 });
@@ -544,6 +564,22 @@ describe('обсуждение задачи (T29)', () => {
     const again = await call('task_comment_add', { ...args, approvalId: operationId });
     expect(again.data).toMatchObject({ replayed: true, messageId: 603 });
     expect(t.bitrix.callsTo('tasks.task.chat.message.send')).toHaveLength(1);
+  });
+
+  it('ревью: такой же текст от другого участника новее нашего — messageId только собственного сообщения', async () => {
+    await start();
+    t.bitrix.on('im.dialog.messages.get', (c) => {
+      const chatId = Number(String(c.body['DIALOG_ID']).replace(/^chat/, ''));
+      const list = [...(portal.chats.get(chatId) ?? [])];
+      list.push(portal.msg(chatId, 999, 9, 'Готово, проверьте'));
+      return legacyOk({ chat_id: chatId, messages: list.sort((a, b) => b.id - a.id), users: [], files: [] });
+    });
+    const { done } = await approveAndRun('task_comment_add', {
+      taskId: 200,
+      text: 'Готово, проверьте',
+      idempotencyKey: randomUUID(),
+    });
+    expect(done.data).toMatchObject({ backend: 'chat', messageId: 603 });
   });
 
   it('новая карточка, v3 отказал при отправке → ошибка без отправки в старый комментарий (нет дубля)', async () => {

@@ -256,7 +256,8 @@ export function validateOrder(
 ): Record<string, 'ASC' | 'DESC'> {
   const out: Record<string, 'ASC' | 'DESC'> = {};
   for (const [field, dir] of Object.entries(order)) {
-    if (!own(meta, field)) throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field))
+      throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     const d = String(dir).toUpperCase();
     if (d !== 'ASC' && d !== 'DESC') throw bad(`order.${field}`, 'допустимо ASC или DESC');
     out[field] = d;

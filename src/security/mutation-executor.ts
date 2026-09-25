@@ -18,6 +18,7 @@ import type { AppLogger } from '../logging/logger.js';
 import type { OperationRow, OperationsStore } from '../storage/operations.js';
 import { ApprovalService, type PlanSummary } from './approval-service.js';
 import type { SecretBox } from './crypto.js';
+import { canonicalJson } from '../bitrix/pagination.js';
 import { argsHash, canonicalArgs, idempotencyScope } from './idempotency.js';
 
 export interface MutationPrincipal {
@@ -271,6 +272,22 @@ export class MutationExecutor {
     let performed: PerformResult;
     try {
       if (req.precheck) await req.precheck();
+      // §8.2 п.4: выполняется ровно подтверждённый план. Обработчик пересчитал план по свежему состоянию
+      // портала; если действие, цель или детали (режим create/update, итоговые параметры, diff) разошлись
+      // с подтверждёнными — записи нет, операция failed, нужен новый план. Работает и без expectedStateHash;
+      // специфичные проверки инструмента (precheck) идут раньше и дают более точную причину.
+      const approved = this.approvals.readPlan(op.id, req.principal.id, req.principal.portalKey).plan.summary;
+      if (!samePlan(approved, req.summary)) {
+        throw new AppError(
+          'CONFLICT',
+          'Состояние портала изменилось: план выполнения отличается от подтверждённого',
+          {
+            operationId: op.id,
+            reason: 'PLAN_CHANGED',
+            nextAction: 'Подготовьте новый план (вызов без approvalId) и подтвердите его заново',
+          },
+        );
+      }
       performed = await req.perform();
     } catch (e) {
       const err = AppError.from(e);
@@ -408,4 +425,13 @@ function unknownOutcome(operationId: string): AppError {
 
 export function newOperationId(): string {
   return randomUUID();
+}
+
+/** Сравнение планов без рисков: риски — пояснения, а действие, цель и детали определяют запись. */
+function samePlan(a: PlanSummary, b: PlanSummary): boolean {
+  return (
+    a.action === b.action &&
+    a.target === b.target &&
+    canonicalJson(a.details ?? {}) === canonicalJson(b.details ?? {})
+  );
 }
