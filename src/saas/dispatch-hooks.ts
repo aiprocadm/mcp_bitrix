@@ -11,7 +11,6 @@
  * «Запись» (succeeded/unknown) учитывает наблюдатель MutationExecutor (runtime.ts, `onMutationFinished`).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash } from 'node:crypto';
 import type { PortalLimiter } from '../bitrix/rate-limiter.js';
 import type { AppLogger } from '../logging/logger.js';
 import type { DispatchHooks } from '../mcp/register-tools.js';
@@ -46,18 +45,10 @@ export class ReachCountingLimiter implements PortalLimiter {
   }
 }
 
-/** Ссылка на подтверждение плана в кабинете (SaaS-ТЗ §11.2). Страницу обслуживает кабинет (/app). */
-export function approvalUrl(publicBaseUrl: string, operationId: string): string {
-  return `${publicBaseUrl.replace(/\/+$/, '')}/app/approvals/${encodeURIComponent(operationId)}`;
-}
+// Ссылка и код сверки — единый источник с кабинетом: код в чате должен совпасть с кодом на странице (§11.2).
+import { approvalShortCode, approvalUrl } from './cabinet/approval-link.js';
 
-/**
- * Короткий код сверки (§11.2): человек сравнивает код в чате и на странице подтверждения. Не секрет и не
- * заменяет вход: страница подтверждения без входа ничего не раскрывает. Кабинет вычисляет тем же способом.
- */
-export function approvalShortCode(operationId: string): string {
-  return createHash('sha256').update(`approval:${operationId}`).digest('hex').slice(0, 6).toUpperCase();
-}
+export { approvalShortCode, approvalUrl };
 
 /** APPROVAL_REQUIRED → + approvalUrl, approvalCode и nextAction про кабинет (вместо CLI режима single). */
 export function withApprovalUrl(envelope: Envelope, publicBaseUrl: string): Envelope {

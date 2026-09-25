@@ -12,6 +12,7 @@ import { selectTasks } from './ops/settings.js';
 import { MemoryLeaseStore, WorkerRunner } from './ops/worker.js';
 import { safeEqualStr, startSaasHttp, type SaasHttpOptions } from './http.js';
 import { createSaasRuntime, type SaasRuntime, type SaasRuntimeOptions } from './runtime.js';
+import { saasWebHttpOptions, type SaasWebOptions } from './web.js';
 import { createWorkerTasks, type WorkerTaskOptions } from './worker-tasks.js';
 
 export interface SaasProcessHandle {
@@ -57,6 +58,8 @@ export async function startSaas(
   config: AppConfig,
   opts: SaasRuntimeOptions & {
     http?: SaasHttpOptions;
+    /** Кабинет `/app` подключается всегда; сюда — панель владельца и прочие разделы. */
+    web?: SaasWebOptions;
     worker?: WorkerTaskOptions;
     host?: string;
     port?: number;
@@ -67,6 +70,7 @@ export async function startSaas(
   try {
     if (role === 'web') {
       const handle = await startSaasHttp(rt, {
+        ...saasWebHttpOptions(rt, opts.web),
         ...opts.http,
         ...(opts.host ? { host: opts.host } : {}),
         ...(opts.port !== undefined ? { port: opts.port } : {}),
