@@ -81,7 +81,9 @@ export function parseLegacyResponse(
     });
   }
   const obj = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
-  const errorField = obj['error'];
+  // Код ошибки обычно строка; у catalog.* — число (например 200040300010).
+  const rawError = obj['error'];
+  const errorField = typeof rawError === 'number' && Number.isFinite(rawError) ? String(rawError) : rawError;
   if (typeof errorField === 'string' && errorField.length > 0) {
     throw mapUpstreamError(
       { httpStatus, upstreamCode: sanitizeCode(errorField), retryAfterMs },
