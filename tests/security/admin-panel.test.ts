@@ -142,12 +142,12 @@ describe('панель /admin', () => {
     expect(ok.status).toBe(303);
     const sc = ok.headers.get('set-cookie') ?? '';
     expect(sc).toMatch(/^mcp_admin=[A-Za-z0-9_-]+; Path=\/admin; HttpOnly; SameSite=Strict; Max-Age=28800$/);
-    expect(t.app.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM admin_sessions')?.n).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect(
+      (await t.app.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM admin_sessions'))?.n,
+    ).toBeGreaterThanOrEqual(1);
     // В БД — только хеш cookie
     const raw = sc.split(';')[0]?.split('=')[1] ?? '';
-    expect(t.app.db.get('SELECT 1 AS x FROM admin_sessions WHERE id_hash = ?', raw)).toBeUndefined();
+    expect(await t.app.db.get('SELECT 1 AS x FROM admin_sessions WHERE id_hash = ?', raw)).toBeUndefined();
   });
 
   it('операции: план оператора op виден владельцу; CSRF/Origin/слово проверяются; подтверждение → повтор вызова с approvalId выполняет запись один раз', async () => {
@@ -184,7 +184,7 @@ describe('панель /admin', () => {
         })
       ).status,
     ).toBe(400);
-    expect(t.app.operations.view(id, 'op', t.app.auth.portalKey)?.status).toBe('prepared');
+    expect((await t.app.operations.view(id, 'op', t.app.auth.portalKey))?.status).toBe('prepared');
     expect(hooks.performCalls).toBe(0);
     const approve = await post(
       `/admin/operations/${id}`,
@@ -193,7 +193,7 @@ describe('панель /admin', () => {
     );
     expect(approve.status).toBe(303);
     expect(approve.headers.get('location')).toBe(`/admin/operations/${id}?done=approved`);
-    expect(t.app.operations.view(id, 'op', t.app.auth.portalKey)?.status).toBe('approved');
+    expect((await t.app.operations.view(id, 'op', t.app.auth.portalKey))?.status).toBe('approved');
     const done = await prepare(OP, '[MCP TEST] панель', KEY1);
     const withApproval = await dispatch(
       defOf(t),
@@ -215,7 +215,7 @@ describe('панель /admin', () => {
         )
       ).status,
     ).toBe(409);
-    const auditRows = t.app.db.all<{ operation_kind: string; outcome: string }>(
+    const auditRows = await t.app.db.all<{ operation_kind: string; outcome: string }>(
       "SELECT operation_kind, outcome FROM audit WHERE tool = 'admin_panel'",
     );
     expect(auditRows).toContainEqual({ operation_kind: 'approve', outcome: 'success' });
@@ -231,14 +231,14 @@ describe('панель /admin', () => {
       { cookie: op1.cookie },
     );
     expect(foreign.status).toBe(403);
-    expect(t.app.operations.view(ownerPlan, 'owner', t.app.auth.portalKey)?.status).toBe('prepared');
+    expect((await t.app.operations.view(ownerPlan, 'owner', t.app.auth.portalKey))?.status).toBe('prepared');
     const deny = await post(
       `/admin/operations/${opPlan}`,
       form({ _csrf: op1.csrf, decision: 'deny', word: 'ОТКЛОНЯЮ' }),
       { cookie: op1.cookie },
     );
     expect(deny.status).toBe(303);
-    expect(t.app.operations.view(opPlan, 'op', t.app.auth.portalKey)?.status).toBe('denied');
+    expect((await t.app.operations.view(opPlan, 'op', t.app.auth.portalKey))?.status).toBe('denied');
     const viewer = await login('viewer');
     const ro = await post(
       `/admin/operations/${ownerPlan}`,
@@ -259,10 +259,10 @@ describe('панель /admin', () => {
     const html = await r.text();
     const token = /fileToken: <code>([^<]+)<\/code>/.exec(html)?.[1] ?? '';
     expect(token).not.toBe('');
-    const m = t.app.files.resolve(token, 'owner');
+    const m = await t.app.files.resolve(token, 'owner');
     expect(m.originalName).toBe('panel-note.txt');
     expect(t.app.files.readVerified(m).toString()).toBe('привет из панели\n');
-    expect(() => t.app.files.resolve(token, 'op')).toThrow(/не найден/);
+    await expect(t.app.files.resolve(token, 'op')).rejects.toThrow(/не найден/);
     const bad = new FormData();
     bad.append('_csrf', boss.csrf);
     bad.append('file', new Blob(['MZ']), 'evil.exe');

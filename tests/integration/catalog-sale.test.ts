@@ -193,7 +193,7 @@ async function approveAndRun(name: string, args: Record<string, unknown>) {
   const prep = await call(name, args);
   expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
   const operationId = prep.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(name, { ...args, approvalId: operationId });
   return { prep, done, operationId };
 }
@@ -540,7 +540,7 @@ describe('catalog_price_set: decimal, валюта, тип цены, add/update'
       idempotencyKey: randomUUID(),
     });
     expect(type.error?.details['reason']).toBe('INVALID_PRICE_TYPE');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('INVALID_PRODUCT_TYPE: цена услуги с productKind=product; отсутствующий товар → NOT_FOUND', async () => {
@@ -575,7 +575,7 @@ describe('catalog_price_set: decimal, валюта, тип цены, add/update'
     const prep = await call('catalog_price_set', args);
     expect(prep.error?.details['plan']).toMatchObject({ details: { mode: 'create' } });
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     state.prices.push({ id: 778, productId: 12, catalogGroupId: 2, price: 90, currency: 'USD' });
     const run = await call('catalog_price_set', { ...args, approvalId: operationId });
     expect(run.error?.code).toBe('CONFLICT');
@@ -624,7 +624,7 @@ describe('catalog_price_set: decimal, валюта, тип цены, add/update'
     };
     const prep = await call('catalog_price_set', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     setPrice(500, 1070);
     const raced = await call('catalog_price_set', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -642,7 +642,7 @@ describe('catalog_price_set: decimal, валюта, тип цены, add/update'
     };
     const p2 = await call('catalog_price_set', createArgs);
     const op2 = p2.error?.details['operationId'] as string;
-    t.app.approvals.approve(op2, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(op2, 'owner', t.app.auth.portalKey);
     // Handler при повторе читает цену заново; параллельное создание между чтением и записью ловит precheck.
     let injected = false;
     const orig = t.bitrix.callsTo('catalog.price.list').length;
@@ -891,7 +891,7 @@ describe('карточки товаров: create/update', () => {
     };
     const prep = await call('catalog_product_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     Object.assign(state.products.get(12) ?? {}, { active: 'N' });
     const raced = await call('catalog_product_update', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');

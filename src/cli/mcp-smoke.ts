@@ -113,6 +113,7 @@ async function main(): Promise<void> {
   }
   if (transport === 'http') {
     const app = createApp(config, { logger: createSilentLogger() });
+    await app.ready;
     const handle = await startHttp(app, { host: '127.0.0.1', port: 0 });
     try {
       out(`http: сервер на ${handle.url}`);

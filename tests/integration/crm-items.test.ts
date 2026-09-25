@@ -73,7 +73,7 @@ async function approveAndRun(name: string, args: Record<string, unknown>) {
   const prep = await call(name, args);
   expect(prep.error?.code, JSON.stringify(prep.error)).toBe('APPROVAL_REQUIRED');
   const operationId = prep.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(name, { ...args, approvalId: operationId });
   return { prep, done, operationId };
 }
@@ -330,7 +330,7 @@ describe('смарт-процессы: запись', () => {
     };
     const prep = await call('smart_process_item_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     store.items[1256]?.set(4, { ...store.items[1256]?.get(4), opportunity: 7777 });
     const done = await call('smart_process_item_update', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('CONFLICT');
@@ -539,7 +539,7 @@ describe('счета (§9.5)', () => {
     expect(noApproval.error?.code).toBe('PARTIAL_SUCCESS');
     expect(t.bitrix.callsTo('crm.item.add')).toHaveLength(1);
     expect(t.bitrix.callsTo('crm.item.productrow.set')).toHaveLength(1);
-    const op = t.app.operations.get(operationId);
+    const op = await t.app.operations.get(operationId);
     expect(op?.status).toBe('succeeded');
   });
 
@@ -610,7 +610,7 @@ describe('crm_delete_record (этап 14)', () => {
       idempotencyKey: randomUUID(),
     });
     expect(env.error?.code).toBe('NOT_FOUND');
-    expect(t.app.db.all('SELECT id FROM operations')).toHaveLength(0);
+    expect(await t.app.db.all('SELECT id FROM operations')).toHaveLength(0);
   });
 
   it('сделка: план (название, стадия, сумма, ответственный, impact) → approve → одно удаление → verified (NOT_FOUND) → replay', async () => {
@@ -688,7 +688,7 @@ describe('crm_delete_record (этап 14)', () => {
     };
     const prep = await call('crm_delete_record', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     store.items[1256]?.set(8, { ...store.items[1256]?.get(8), title: 'Изменён' });
     const res = await call('crm_delete_record', { ...args, approvalId: operationId });
     expect(res.error?.code).toBe('CONFLICT');

@@ -29,6 +29,8 @@ export interface ToolAnnotations {
 
 export interface ToolContext {
   readonly requestId: string;
+  /** Арендатор вызова (SaaS-ТЗ §5.2); в single — `local`. Инструменты не используют его для доступа к данным. */
+  readonly tenant: { readonly id: string };
   readonly principal: Principal;
   readonly config: AppConfig;
   readonly policies: Policies;

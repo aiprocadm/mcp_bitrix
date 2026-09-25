@@ -20,7 +20,7 @@ import {
 import path from 'node:path';
 import { AppError } from '../errors/app-error.js';
 import type { AppLogger } from '../logging/logger.js';
-import type { Database } from '../storage/database.js';
+import { toNumber, type SqlDb } from '../storage/sql.js';
 import { ScannerUnavailableError, type FileScanner } from './scanner.js';
 import { assertSize, detectMime, extensionOf, sanitizeFileName } from './validation.js';
 
@@ -79,7 +79,7 @@ function toManifest(row: ManifestRow): FileManifest {
     token: row.token,
     principalId: row.principal_id,
     sha256: row.sha256,
-    size: row.size,
+    size: toNumber(row.size),
     originalName: row.original_name,
     mime: row.mime,
     stagingPath: row.staging_path,
@@ -91,10 +91,17 @@ function toManifest(row: ManifestRow): FileManifest {
 
 export class FileStaging {
   constructor(
-    private readonly db: Database,
+    private readonly db: SqlDb,
     private readonly opts: FileStagingOptions,
     private readonly logger: AppLogger,
+    /** Арендатор (SaaS-ТЗ §6.2): манифесты и fileToken видны только внутри него. */
+    readonly tenantId: string,
   ) {}
+
+  /** Тот же staging, привязанный к другому арендатору (общие каталоги и сканер, свои манифесты). */
+  forTenant(tenantId: string): FileStaging {
+    return new FileStaging(this.db, this.opts, this.logger, tenantId);
+  }
 
   /** CLI file:stage: только внутри UPLOAD_ROOT, без симлинков и traversal, с проверкой до чтения. */
   async stageFromPath(inputPath: string, principalId: string): Promise<FileManifest> {
@@ -187,18 +194,21 @@ export class FileStaging {
       expiresAt: new Date(now + this.opts.ttlSeconds * 1000).toISOString(),
       scanStatus,
     };
-    this.db.run(
-      'INSERT INTO file_manifests (token, principal_id, sha256, size, original_name, mime, staging_path, created_at, expires_at, scan_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      manifest.token,
-      manifest.principalId,
-      manifest.sha256,
-      manifest.size,
-      manifest.originalName,
-      manifest.mime,
-      manifest.stagingPath,
-      manifest.createdAt,
-      manifest.expiresAt,
-      manifest.scanStatus,
+    await this.db.withTenant(this.tenantId, (x) =>
+      x.run(
+        'INSERT INTO file_manifests (token, tenant_id, principal_id, sha256, size, original_name, mime, staging_path, created_at, expires_at, scan_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        manifest.token,
+        this.tenantId,
+        manifest.principalId,
+        manifest.sha256,
+        manifest.size,
+        manifest.originalName,
+        manifest.mime,
+        manifest.stagingPath,
+        manifest.createdAt,
+        manifest.expiresAt,
+        manifest.scanStatus,
+      ),
     );
     this.logger.info({ token, size: buf.length, mime, scanStatus }, 'file staged');
     return manifest;
@@ -237,8 +247,14 @@ export class FileStaging {
   }
 
   /** Манифест по токену: только свой, не истёкший. Путь наружу не отдаётся. */
-  resolve(token: string, principalId: string): FileManifest {
-    const row = this.db.get<ManifestRow>('SELECT * FROM file_manifests WHERE token = ?', token);
+  async resolve(token: string, principalId: string): Promise<FileManifest> {
+    const row = await this.db.withTenant(this.tenantId, (x) =>
+      x.get<ManifestRow>(
+        'SELECT * FROM file_manifests WHERE tenant_id = ? AND token = ?',
+        this.tenantId,
+        token,
+      ),
+    );
     const invalid = () =>
       new AppError('NOT_FOUND', 'fileToken не найден, истёк или принадлежит другому оператору', {
         field: 'fileToken',
@@ -246,30 +262,32 @@ export class FileStaging {
       });
     if (row?.principal_id !== principalId) throw invalid();
     if (Date.parse(row.expires_at) < Date.now()) {
-      this.remove(row.token, row.staging_path);
+      await this.remove(row.token, row.staging_path);
       throw invalid();
     }
     return toManifest(row);
   }
 
   /** Свои подготовленные файлы (панель), без путей. */
-  listOwn(principalId: string): StagedFileInfo[] {
-    return this.db
-      .all<ManifestRow>(
-        'SELECT * FROM file_manifests WHERE principal_id = ? AND expires_at >= ? ORDER BY created_at DESC',
+  async listOwn(principalId: string): Promise<StagedFileInfo[]> {
+    const rows = await this.db.withTenant(this.tenantId, (x) =>
+      x.all<ManifestRow>(
+        'SELECT * FROM file_manifests WHERE tenant_id = ? AND principal_id = ? AND expires_at >= ? ORDER BY created_at DESC',
+        this.tenantId,
         principalId,
         new Date().toISOString(),
-      )
-      .map((r) => ({
-        token: r.token,
-        originalName: r.original_name,
-        size: r.size,
-        mime: r.mime,
-        sha256: r.sha256,
-        createdAt: r.created_at,
-        expiresAt: r.expires_at,
-        scanStatus: r.scan_status,
-      }));
+      ),
+    );
+    return rows.map((r) => ({
+      token: r.token,
+      originalName: r.original_name,
+      size: toNumber(r.size),
+      mime: r.mime,
+      sha256: r.sha256,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      scanStatus: r.scan_status,
+    }));
   }
 
   /** Читает staged-копию и сверяет хеш/размер с манифестом (T26); при обязательном сканере — только clean. */
@@ -301,22 +319,39 @@ export class FileStaging {
     return buf;
   }
 
-  cleanupExpired(): number {
-    const rows = this.db.all<{ token: string; staging_path: string }>(
-      'SELECT token, staging_path FROM file_manifests WHERE expires_at < ?',
-      new Date().toISOString(),
+  async cleanupExpired(): Promise<number> {
+    const rows = await this.db.withTenant(this.tenantId, (x) =>
+      x.all<{ token: string; staging_path: string }>(
+        'SELECT token, staging_path FROM file_manifests WHERE tenant_id = ? AND expires_at < ?',
+        this.tenantId,
+        new Date().toISOString(),
+      ),
     );
-    for (const r of rows) this.remove(r.token, r.staging_path);
+    for (const r of rows) await this.remove(r.token, r.staging_path);
     return rows.length;
   }
 
-  private remove(token: string, stagingPath: string): void {
+  /** Удаление всех подготовленных файлов арендатора (удаление данных арендатора, SaaS-ТЗ §14). */
+  async purgeAll(): Promise<number> {
+    const rows = await this.db.withTenant(this.tenantId, (x) =>
+      x.all<{ token: string; staging_path: string }>(
+        'SELECT token, staging_path FROM file_manifests WHERE tenant_id = ?',
+        this.tenantId,
+      ),
+    );
+    for (const r of rows) await this.remove(r.token, r.staging_path);
+    return rows.length;
+  }
+
+  private async remove(token: string, stagingPath: string): Promise<void> {
     try {
       rmSync(stagingPath, { force: true });
     } catch {
       // уже удалён
     }
-    this.db.run('DELETE FROM file_manifests WHERE token = ?', token);
+    await this.db.withTenant(this.tenantId, (x) =>
+      x.run('DELETE FROM file_manifests WHERE tenant_id = ? AND token = ?', this.tenantId, token),
+    );
   }
 
   private realRoot(): string {

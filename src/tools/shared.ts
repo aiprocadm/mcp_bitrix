@@ -177,13 +177,13 @@ export async function statefulPage<S>(
 ): Promise<PageResult> {
   const binding = cursorBinding(ctx, opts.tool, opts.bindingParts);
   // peek + discard после успеха: временная ошибка портала не лишает продолжения.
-  const state = opts.cursor ? ctx.cursors.peek<S>(opts.cursor, binding) : opts.initial;
+  const state = opts.cursor ? await ctx.cursors.peek<S>(opts.cursor, binding) : opts.initial;
   const page = await opts.fetch(state);
-  if (opts.cursor) ctx.cursors.discard(opts.cursor);
+  if (opts.cursor) await ctx.cursors.discard(opts.cursor);
   const hasMore = page.next !== undefined;
   return {
     items: page.items,
-    nextCursor: hasMore ? ctx.cursors.create(binding, page.next) : null,
+    nextCursor: hasMore ? await ctx.cursors.create(binding, page.next) : null,
     hasMore,
     upstreamTotal: undefined,
     upstreamCalls: 1,

@@ -1,0 +1,119 @@
+# nginx перед SaaS-экземплярами (SaaS-ТЗ §5.1, §13; этап S8). В compose монтируется как
+# /etc/nginx/conf.d/default.conf; сертификаты — ./certs (fullchain.pem, privkey.pem; certbot/ACME — на хосте).
+# Замените mcp.example.com на домен из PUBLIC_BASE_URL. НЕ ПРОВЕРЕН ЗАПУСКОМ nginx в среде разработки
+# (синтаксис проверяется на стенде: `docker compose exec nginx nginx -t`).
+
+# Балансировка web ×2. Состояние MCP-сессии Streamable HTTP пока живёт в памяти экземпляра, поэтому запросы с
+# заголовком Mcp-Session-Id закрепляются за экземпляром по хешу идентификатора; запросы без него (initialize,
+# кабинет, OAuth) распределяются по кругу. Когда сессии переедут в Redis (§5.1), `hash` можно убрать.
+upstream mcp_web {
+    hash $http_mcp_session_id consistent;
+    server web1:3000 max_fails=3 fail_timeout=10s;
+    server web2:3000 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+
+# Журнал без строки запроса (в query бывают code/state OAuth) и без заголовков Authorization.
+log_format mcp_noquery '$remote_addr [$time_iso8601] "$request_method $uri" $status $body_bytes_sent '
+                       '$request_time $upstream_addr';
+
+# Лимит входящих на уровне прокси (грубая защита; точные лимиты — в сервисе, §9.3, §12 п.7).
+limit_req_zone $binary_remote_addr zone=per_ip:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=oauth_register:10m rate=10r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name mcp.example.com;
+    # ACME http-01 (certbot --webroot) — при необходимости смонтируйте каталог
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name mcp.example.com;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    server_tokens off;
+
+    access_log /var/log/nginx/access.log mcp_noquery;
+
+    client_max_body_size 2m;
+    limit_req zone=per_ip burst=40 nodelay;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Request-Id $request_id;
+
+    # MCP Streamable HTTP (POST/GET SSE/DELETE): без буферизации, долгие ответы.
+    location = /mcp {
+        proxy_pass http://mcp_web;
+        proxy_set_header Origin $http_origin;
+        proxy_set_header Authorization $http_authorization;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 60s;
+    }
+
+    # Метаданные RFC 8414 / RFC 9728 — публичные.
+    location ^~ /.well-known/ {
+        proxy_pass http://mcp_web;
+    }
+
+    # Сервер авторизации MCP (§7.1); динамическая регистрация клиентов — отдельный лимит.
+    location = /oauth/register {
+        limit_req zone=oauth_register burst=5 nodelay;
+        proxy_pass http://mcp_web;
+    }
+    location ^~ /oauth/ {
+        proxy_pass http://mcp_web;
+    }
+
+    # Установка и события приложения Bitrix24 (§8), кабинет (§11.1), панель владельца (§11.3).
+    location ^~ /b24/ {
+        proxy_pass http://mcp_web;
+    }
+    location ^~ /app/ {
+        client_max_body_size 12m; # загрузка файлов для disk_upload_file
+        proxy_request_buffering off;
+        proxy_set_header Origin $http_origin;
+        proxy_pass http://mcp_web;
+    }
+    location ^~ /owner/ {
+        # сузьте доступ к панели владельца: allow <IP офиса>; deny all;
+        proxy_set_header Origin $http_origin;
+        proxy_pass http://mcp_web;
+    }
+
+    # Уведомления ЮKassa (§10.1): сервис всё равно перепроверяет статус через API; при желании — allow-список
+    # адресов из документации ЮKassa (https://yookassa.ru/developers/using-api/webhooks#ip).
+    # /billing/hooks и /billing/hooks/yookassa; адрес отправителя сервис берёт из X-Forwarded-For (TRUSTED_PROXIES).
+    location ^~ /billing/hooks {
+        proxy_pass http://mcp_web;
+    }
+
+    location = /healthz {
+        proxy_pass http://mcp_web;
+    }
+
+    # /metrics и /readyz наружу не публикуются: Prometheus опрашивает экземпляры по внутренней сети.
+    location / {
+        return 404;
+    }
+}

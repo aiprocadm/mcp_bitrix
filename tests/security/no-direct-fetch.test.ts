@@ -5,7 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { MOCK_ENV } from '../helpers/app.js';
 
 const SRC = path.resolve(MOCK_ENV, '..', '..', '..', 'src');
-const ALLOWED = new Set(['bitrix/client.ts', 'app/container.ts', 'cli/mcp-smoke.ts']);
+const ALLOWED = new Set([
+  'bitrix/client.ts',
+  'app/container.ts',
+  'cli/mcp-smoke.ts',
+  // S4: загрузка Client ID Metadata Document (https, публичные адреса, без редиректов, лимит размера).
+  'saas/oauth/cimd-fetch.ts',
+]);
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {

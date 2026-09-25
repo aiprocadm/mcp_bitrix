@@ -4,13 +4,15 @@
  * (AUDIT_UNAVAILABLE), чтение продолжается в degraded-режиме.
  */
 import { createHmac } from 'node:crypto';
-import type { Database } from '../storage/database.js';
+import type { SqlDb } from '../storage/sql.js';
 import type { AppLogger } from './logger.js';
 import { AppError } from '../errors/app-error.js';
 
 export type AuditOutcome = 'success' | 'error' | 'denied' | 'prepared' | 'unknown';
 
 export interface AuditEntry {
+  /** Арендатор (SaaS-ТЗ §6.2); по умолчанию `local` (режим single). */
+  tenantId?: string | undefined;
   requestId: string;
   principalId: string;
   portalKey: string;
@@ -32,14 +34,13 @@ export class AuditLog {
   private lastError: string | undefined;
 
   constructor(
-    private readonly db: Database | undefined,
+    private readonly db: SqlDb | undefined,
     private readonly hmacKey: Buffer,
     private readonly logger: AppLogger,
     private readonly enabled: boolean,
     private readonly retentionDays: number,
   ) {
     this.available = enabled ? db !== undefined : true;
-    if (this.enabled && this.db) this.cleanup();
   }
 
   /** Псевдоним principal: HMAC, чтобы журнал не раскрывал идентификаторы (ТЗ §8.1). */
@@ -56,11 +57,11 @@ export class AuditLog {
   }
 
   /** Перед любой записью в Bitrix: проактивная проба журнала, а не только память о прошлой ошибке. */
-  assertAvailableForWrite(): void {
+  async assertAvailableForWrite(): Promise<void> {
     if (!this.enabled) return;
     if (this.available && this.db) {
       try {
-        this.db.get('SELECT 1 AS one FROM audit LIMIT 1');
+        await this.db.get('SELECT 1 AS one FROM audit LIMIT 1');
       } catch (e) {
         this.available = false;
         this.lastError = e instanceof Error ? e.name : 'unknown';
@@ -73,32 +74,36 @@ export class AuditLog {
     }
   }
 
-  record(entry: AuditEntry): void {
+  async record(entry: AuditEntry): Promise<void> {
     if (!this.enabled) return;
     if (!this.db) {
       this.available = false;
       return;
     }
+    const tenantId = entry.tenantId ?? 'local';
     try {
-      this.db.run(
-        `INSERT INTO audit (ts, request_id, principal_hash, portal_key, tool, method, api_version, operation_kind,
+      await this.db.withTenant(tenantId, (x) =>
+        x.run(
+          `INSERT INTO audit (tenant_id, ts, request_id, principal_hash, portal_key, tool, method, api_version, operation_kind,
            target_alias, args_hash, approval_id, outcome, attempts, error_code, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        new Date().toISOString(),
-        entry.requestId,
-        this.alias(entry.principalId),
-        entry.portalKey,
-        entry.tool ?? null,
-        entry.method ?? null,
-        entry.apiVersion ?? null,
-        entry.operationKind,
-        entry.targetAlias ?? null,
-        entry.argsHash ?? null,
-        entry.approvalId ?? null,
-        entry.outcome,
-        entry.attempts ?? 1,
-        entry.errorCode ?? null,
-        entry.durationMs ?? null,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          tenantId,
+          new Date().toISOString(),
+          entry.requestId,
+          this.alias(entry.principalId),
+          entry.portalKey,
+          entry.tool ?? null,
+          entry.method ?? null,
+          entry.apiVersion ?? null,
+          entry.operationKind,
+          entry.targetAlias ?? null,
+          entry.argsHash ?? null,
+          entry.approvalId ?? null,
+          entry.outcome,
+          entry.attempts ?? 1,
+          entry.errorCode ?? null,
+          entry.durationMs ?? null,
+        ),
       );
       this.available = true;
     } catch (e) {
@@ -108,13 +113,40 @@ export class AuditLog {
     }
   }
 
-  private cleanup(): void {
-    if (!this.db) return;
+  /** Удаление записей старше AUDIT_RETENTION_DAYS (в single — при старте; в SaaS — задача worker). */
+  async cleanup(tenantId = 'local'): Promise<void> {
+    if (!this.enabled || !this.db) return;
     try {
       const cutoff = new Date(Date.now() - this.retentionDays * 86_400_000).toISOString();
-      this.db.run('DELETE FROM audit WHERE ts < ?', cutoff);
+      await this.db.withTenant(tenantId, (x) =>
+        x.run('DELETE FROM audit WHERE tenant_id = ? AND ts < ?', tenantId, cutoff),
+      );
     } catch (e) {
       this.logger.warn({ reason: e instanceof Error ? e.name : 'unknown' }, 'audit cleanup failed');
     }
+  }
+
+  /**
+   * Время последнего успешного вызова инструмента principal (кабинет SaaS: «Проверить подключение», §11.1 п.2).
+   * Записи служебных страниц (`excludeTools`, например сам кабинет) не считаются. Нет журнала — undefined.
+   */
+  async lastSuccessAt(
+    tenantId: string,
+    principalId: string,
+    excludeTools: readonly string[] = [],
+  ): Promise<{ ts: string; tool: string } | undefined> {
+    if (!this.enabled || !this.db) return undefined;
+    const excluded = excludeTools.filter((t) => /^[a-z0-9_]{1,64}$/.test(t));
+    const notIn = excluded.length ? ` AND tool NOT IN (${excluded.map(() => '?').join(', ')})` : '';
+    const row = await this.db.withTenant(tenantId, (x) =>
+      x.get<{ ts: string; tool: string }>(
+        `SELECT ts, tool FROM audit WHERE tenant_id = ? AND principal_hash = ? AND outcome = 'success' AND tool IS NOT NULL${notIn}
+         ORDER BY ts DESC LIMIT 1`,
+        tenantId,
+        this.alias(principalId),
+        ...excluded,
+      ),
+    );
+    return row ? { ts: row.ts, tool: row.tool } : undefined;
   }
 }

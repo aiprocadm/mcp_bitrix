@@ -274,7 +274,7 @@ describe('OAuth-защита MCP (HTTP)', () => {
       await bob.client.close();
     }
     // ТЗ §8.1: в журнале — HMAC-псевдоним субъекта, не сырой идентификатор; alice и bob различимы
-    const rows = t.app.db.all<{ principal_hash: string }>(
+    const rows = await t.app.db.all<{ principal_hash: string }>(
       "SELECT DISTINCT principal_hash FROM audit WHERE tool = 'bitrix_server_version'",
     );
     expect(rows.length).toBeGreaterThanOrEqual(2);

@@ -27,8 +27,8 @@ export const operationStatusTool = defineTool({
     errorCode: z.string().nullable(),
     target: z.string().nullable(),
   }),
-  handler: (args, ctx) => {
-    const view = ctx.operations.view(args.operationId, ctx.principal.id, ctx.bitrix.auth.portalKey);
+  handler: async (args, ctx) => {
+    const view = await ctx.operations.view(args.operationId, ctx.principal.id, ctx.bitrix.auth.portalKey);
     if (!view) {
       throw new AppError('NOT_FOUND', 'Операция не найдена или принадлежит другому субъекту', {
         operationId: args.operationId,

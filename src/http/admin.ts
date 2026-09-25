@@ -189,7 +189,7 @@ export function registerAdminPanel(
         outcome: 'success' | 'denied' | 'error',
         errorCode?: string,
       ) => {
-        app.audit.record({
+        void app.audit.record({
           requestId: randomUUID(),
           principalId: session.user.principalId,
           portalKey,
@@ -279,10 +279,10 @@ export function registerAdminPanel(
           .redirect('/admin/login', 303);
       });
 
-      scope.get('/operations', (req, reply) => {
+      scope.get('/operations', async (req, reply) => {
         const session = requireSession(req, reply);
         if (!session) return reply;
-        const rows = app.operations.listPendingAll(portalKey);
+        const rows = await app.operations.listPendingAll(portalKey);
         const list = rows.length
           ? `<table><tr><th>Операция</th><th>Инструмент</th><th>Статус</th><th>Оператор</th><th>Цель</th><th>Действует до</th></tr>${rows
               .map(
@@ -302,18 +302,18 @@ export function registerAdminPanel(
         );
       });
 
-      scope.get<{ Params: { id: string } }>('/operations/:id', (req, reply) => {
+      scope.get<{ Params: { id: string } }>('/operations/:id', async (req, reply) => {
         const session = requireSession(req, reply);
         if (!session) return reply;
         const id = req.params.id;
-        const row = /^[0-9a-f-]{36}$/.test(id) ? app.operations.getForPortal(id, portalKey) : undefined;
+        const row = /^[0-9a-f-]{36}$/.test(id) ? await app.operations.getForPortal(id, portalKey) : undefined;
         if (!row)
           return html(
             reply,
             404,
             page('Операция', '<div class="card"><p class="err">Операция не найдена.</p></div>', session),
           );
-        const { view, plan } = app.approvals.readPlan(id, row.principal_id, portalKey);
+        const { view, plan } = await app.approvals.readPlan(id, row.principal_id, portalKey);
         const role = app.admin.role(session.user);
         const own = row.principal_id === session.user.principalId;
         const canDecide = roleAtLeast(role, 'administrator') || (own && roleAtLeast(role, 'operator'));
@@ -350,13 +350,13 @@ ${form}</div>`;
         return html(reply, 200, page('Операция', body, session));
       });
 
-      scope.post<{ Params: { id: string } }>('/operations/:id', (req, reply) => {
+      scope.post<{ Params: { id: string } }>('/operations/:id', async (req, reply) => {
         const session = requireSession(req, reply);
         if (!session) return reply;
         const body = req.body as Body;
         if (!requireCsrf(req, reply, session, body?.['_csrf'])) return reply;
         const id = req.params.id;
-        const row = /^[0-9a-f-]{36}$/.test(id) ? app.operations.getForPortal(id, portalKey) : undefined;
+        const row = /^[0-9a-f-]{36}$/.test(id) ? await app.operations.getForPortal(id, portalKey) : undefined;
         if (!row)
           return html(
             reply,
@@ -393,8 +393,8 @@ ${form}</div>`;
           );
         }
         try {
-          if (decision === 'approve') app.approvals.approve(id, row.principal_id, portalKey);
-          else app.approvals.deny(id, row.principal_id, portalKey);
+          if (decision === 'approve') await app.approvals.approve(id, row.principal_id, portalKey);
+          else await app.approvals.deny(id, row.principal_id, portalKey);
         } catch (e) {
           const err = AppError.from(e);
           audit(session, kind, id, 'error', err.code);
@@ -416,9 +416,9 @@ ${form}</div>`;
         );
       });
 
-      const uploadsPage = (session: AdminSession, notice: string): string => {
+      const uploadsPage = async (session: AdminSession, notice: string): Promise<string> => {
         const role = app.admin.role(session.user);
-        const files = app.files.listOwn(session.user.principalId);
+        const files = await app.files.listOwn(session.user.principalId);
         const list = files.length
           ? `<table><tr><th>fileToken</th><th>Файл</th><th>Размер</th><th>Сканер</th><th>Действует до</th></tr>${files
               .map(
@@ -440,10 +440,10 @@ ${form}</div>`;
         );
       };
 
-      scope.get('/uploads', (req, reply) => {
+      scope.get('/uploads', async (req, reply) => {
         const session = requireSession(req, reply);
         if (!session) return reply;
-        return html(reply, 200, uploadsPage(session, ''));
+        return html(reply, 200, await uploadsPage(session, ''));
       });
 
       scope.post('/uploads', async (req, reply) => {
@@ -474,7 +474,7 @@ ${form}</div>`;
             ),
           );
         }
-        if (!part) return html(reply, 400, uploadsPage(session, '<p class="err">Файл не выбран.</p>'));
+        if (!part) return html(reply, 400, await uploadsPage(session, '<p class="err">Файл не выбран.</p>'));
         if (!requireCsrf(req, reply, session, fieldValue(part.fields, '_csrf'))) return reply;
         let buf: Buffer;
         try {
@@ -483,7 +483,7 @@ ${form}</div>`;
           return html(
             reply,
             413,
-            uploadsPage(session, '<p class="err">Файл больше допустимого размера.</p>'),
+            await uploadsPage(session, '<p class="err">Файл больше допустимого размера.</p>'),
           );
         }
         try {
@@ -492,7 +492,7 @@ ${form}</div>`;
           return await html(
             reply,
             200,
-            uploadsPage(
+            await uploadsPage(
               session,
               `<p class="ok">Файл «${esc(m.originalName)}» подготовлен (${String(m.size)} байт, ${esc(m.mime)}, сканер: ${esc(m.scanStatus)}).</p>
 <p>fileToken: <code>${esc(m.token)}</code></p><p>sha256: <code>${esc(m.sha256)}</code></p><p>Действует до ${esc(m.expiresAt)}. Передайте fileToken инструменту <code>disk_upload_file</code>.</p>`,
@@ -505,7 +505,7 @@ ${form}</div>`;
           return html(
             reply,
             status,
-            uploadsPage(
+            await uploadsPage(
               session,
               `<p class="err">${esc(err.message)}${err.details.nextAction ? ` → ${esc(err.details.nextAction)}` : ''}</p>`,
             ),

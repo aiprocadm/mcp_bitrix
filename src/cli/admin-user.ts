@@ -53,6 +53,7 @@ async function main(): Promise<void> {
   });
   const config = cliConfig(args);
   const app = createApp(config, { logger: createSilentLogger() });
+  await app.ready;
   try {
     if (args.flags['list']) {
       const users = app.admin.list();

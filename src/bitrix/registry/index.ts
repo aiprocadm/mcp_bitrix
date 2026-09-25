@@ -7,6 +7,7 @@ import { companyChatMethods } from './company-chat.js';
 import { catalogSaleMethods } from './catalog-sale.js';
 import { feedLandingMethods } from './feed-landing.js';
 import { noteMethods } from './note.js';
+import { saasAppMethods } from './saas-app.js';
 import type { MethodDescriptor } from './descriptor.js';
 
 export const REGISTRY_GROUPS: readonly (readonly (readonly [string, MethodDescriptor])[])[] = [
@@ -18,4 +19,5 @@ export const REGISTRY_GROUPS: readonly (readonly (readonly [string, MethodDescri
   catalogSaleMethods,
   feedLandingMethods,
   noteMethods,
+  saasAppMethods,
 ];

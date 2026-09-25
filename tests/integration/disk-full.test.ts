@@ -354,7 +354,7 @@ describe('disk_delete_file', () => {
     const prep = await call('disk_delete_file', args);
     expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
     expect(t.bitrix.callsTo('disk.file.markdeleted')).toHaveLength(0);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('disk_delete_file', { ...args, approvalId: opId(prep) });
     expect(done.success).toBe(true);
     expect(done.data).toMatchObject({ fileId: 20, inTrash: true, verified: true, replayed: false });
@@ -375,7 +375,7 @@ describe('disk_delete_file', () => {
     const hash = dry.data?.['stateHash'] as string;
     const args = { fileId: 20, expectedStateHash: hash, idempotencyKey: randomUUID() };
     const prep = await call('disk_delete_file', args);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const f = files[20] ?? {};
     f['SIZE'] = '60000';
     f['GLOBAL_CONTENT_VERSION'] = '2';
@@ -399,7 +399,7 @@ describe('disk_delete_file', () => {
     t.bitrix.on('disk.file.markdeleted', legacyOk(true));
     const args = { fileId: 20, idempotencyKey: randomUUID() };
     const prep = await call('disk_delete_file', args);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('disk_delete_file', { ...args, approvalId: opId(prep) });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     const again = await call('disk_delete_file', { ...args, approvalId: opId(prep) });

@@ -461,7 +461,7 @@ describe('calendar_update_event', () => {
     const args = upd({ idempotencyKey: key, expectedStateHash: hash });
     const prep = await call('calendar_update_event', args);
     expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('calendar_update_event', { ...args, approvalId: opId(prep) });
     expect(done.success).toBe(true);
     expect(done.data).toMatchObject({ eventId: 100, verified: true, replayed: false });
@@ -490,7 +490,7 @@ describe('calendar_update_event', () => {
     const key = randomUUID();
     const args = upd({ idempotencyKey: key, expectedStateHash: hash });
     const prep = await call('calendar_update_event', args);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     Object.assign(events[100] ?? {}, { NAME: 'Кто-то переименовал' });
     const raced = await call('calendar_update_event', { ...args, approvalId: opId(prep) });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -529,7 +529,7 @@ describe('calendar_update_event', () => {
     expect(
       ((prep.error?.details['plan'] as Record<string, unknown>)['risks'] as string[]).join(' '),
     ).toContain('Изменится только вхождение 2030-10-08');
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('calendar_update_event', { ...args, approvalId: opId(prep) });
     expect(done.success).toBe(true);
     expect(done.data).toMatchObject({ eventId: 200, newEventId: 1000, verified: true });
@@ -619,7 +619,7 @@ describe('calendar_update_event', () => {
       idempotencyKey: randomUUID(),
     };
     const prep = await call('calendar_update_event', args);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('calendar_update_event', { ...args, approvalId: opId(prep) });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     const again = await call('calendar_update_event', { ...args, approvalId: opId(prep) });
@@ -698,7 +698,7 @@ describe('calendar_delete_event', () => {
       ((plan['details'] as Record<string, unknown>)['impact'] as Record<string, unknown>)['attendees'],
     ).toHaveLength(3);
     expect(t.bitrix.callsTo('calendar.event.delete')).toHaveLength(0);
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('calendar_delete_event', { ...args, approvalId: opId(prep) });
     expect(done.success).toBe(true);
     expect(done.data).toMatchObject({ eventId: 100, deleted: true, verified: true });
@@ -741,7 +741,7 @@ describe('calendar_respond_invitation', () => {
       statusAfter: 'accepted',
       bitrixStatus: 'Y',
     });
-    t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(opId(prep), 'owner', t.app.auth.portalKey);
     const done = await call('calendar_respond_invitation', { ...args, approvalId: opId(prep) });
     expect(done.data).toMatchObject({ eventId: 300, status: 'accepted', verified: true });
     expect(t.bitrix.callsTo('calendar.meeting.status.set')[0]?.body).toEqual({ eventId: 300, status: 'Y' });

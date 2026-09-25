@@ -94,7 +94,7 @@ describe('политика вызова (T10, роли, модули)', () => {
   it('аудит фиксирует каждый вызов с исходом denied/success', async () => {
     const t = createTestApp({}, [fakeCreate]);
     await dispatch(fakeCreate, { title: 'x' }, t.app);
-    const rows = t.app.db.all<{ tool: string; outcome: string; error_code: string | null }>(
+    const rows = await t.app.db.all<{ tool: string; outcome: string; error_code: string | null }>(
       'SELECT tool, outcome, error_code FROM audit',
     );
     expect(rows).toEqual([{ tool: 'test_fake_create', outcome: 'denied', error_code: 'READ_ONLY_MODE' }]);

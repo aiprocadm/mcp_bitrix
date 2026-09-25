@@ -1,0 +1,59 @@
+# Правила алертов Prometheus для SaaS (SaaS-ТЗ §13 «алерты»; этап S8). Имена метрик — src/saas/ops/metrics.ts.
+# НЕ ПРОВЕРЕНЫ живым Prometheus (синтаксис YAML проверяет tests/unit/s8-deploy.test.ts; `promtool check rules` — на стенде).
+# Заполнение диска — метрики node_exporter (ставится на хост отдельно).
+groups:
+  - name: mcp-saas
+    rules:
+      - alert: McpHttp5xx
+        expr: sum(rate(mcp_http_responses_total{class="5xx"}[5m])) / clamp_min(sum(rate(mcp_http_responses_total[5m])), 1) > 0.02
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: 'Доля ответов 5xx выше 2% за 10 минут'
+
+      - alert: McpWorkerNoLeader
+        expr: max(mcp_worker_leader) < 1 or absent(mcp_worker_leader)
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: 'Нет активного worker-лидера: продления, учёт и очистка не выполняются'
+
+      - alert: McpWorkerTaskFailing
+        expr: sum by (task) (increase(mcp_worker_task_runs_total{result="error"}[30m])) >= 3
+        labels: { severity: warn }
+        annotations:
+          summary: 'Задача worker {{ $labels.task }} падает повторно'
+
+      - alert: McpRenewalsFailing
+        expr: increase(mcp_billing_renewals_total{result="failed"}[1h]) > 0
+        labels: { severity: warn }
+        annotations:
+          summary: 'Неуспешные продления подписок за последний час'
+
+      - alert: McpRedisErrors
+        expr: sum(rate(mcp_redis_errors_total[5m])) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: 'Ошибки Redis: лимитер портала работает на запасном локальном лимите, блокировки недоступны'
+
+      - alert: McpPortalQueueHigh
+        expr: max by (portal) (mcp_bitrix_limiter_queue) > 50
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: 'Очередь к порталу {{ $labels.portal }} (псевдоним) держится выше 50'
+
+      - alert: McpBitrixAuthFailures
+        expr: sum(rate(mcp_tool_calls_total{outcome="BITRIX_AUTH_FAILED"}[15m])) > 0.1
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: 'Массовые BITRIX_AUTH_FAILED — возможна недоступность OAuth Bitrix24'
+
+      - alert: HostDiskFilling
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes) < 0.15
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: 'Свободно меньше 15% диска на {{ $labels.instance }} {{ $labels.mountpoint }}'

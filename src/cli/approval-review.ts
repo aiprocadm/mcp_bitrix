@@ -16,12 +16,13 @@ async function main(): Promise<void> {
   const args = cliArgs(process.argv.slice(2), { id: { kind: 'string' }, list: { kind: 'boolean' } });
   const config = cliConfig(args);
   const app = createApp(config, { logger: createSilentLogger() });
+  await app.ready;
   try {
     const principalId = app.principal.id;
     const portalKey = app.auth.portalKey;
 
     if (args.flags['list'] || !args.values['id']) {
-      const pending = app.approvals.listPending(principalId, portalKey);
+      const pending = await app.approvals.listPending(principalId, portalKey);
       if (pending.length === 0) {
         out('Ожидающих подтверждения операций нет.');
       } else {
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
     }
 
     const id = args.values['id'];
-    const { view, plan } = app.approvals.readPlan(id, principalId, portalKey);
+    const { view, plan } = await app.approvals.readPlan(id, principalId, portalKey);
     out('================ ПЛАН ОПЕРАЦИИ ================');
     out(`operationId : ${view.operationId}`);
     out(`статус      : ${view.status}`);
@@ -80,12 +81,12 @@ async function main(): Promise<void> {
         )
       ).trim();
       if (answer === CONFIRM_WORD) {
-        const v = app.approvals.approve(id, principalId, portalKey);
+        const v = await app.approvals.approve(id, principalId, portalKey);
         out(
           `Подтверждено: статус ${v.status}. Теперь повторите вызов инструмента с теми же параметрами и approvalId=${id}.`,
         );
       } else if (answer === DENY_WORD) {
-        const v = app.approvals.deny(id, principalId, portalKey);
+        const v = await app.approvals.deny(id, principalId, portalKey);
         out(`Отклонено: статус ${v.status}.`);
       } else {
         out('Решение не принято; план остаётся в ожидании до истечения срока.');

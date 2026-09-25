@@ -145,7 +145,7 @@ export function buildHttpApp(app: AppContainer, opts: BuildHttpOptions = {}): Fa
     const audit = app.audit.status();
     let dbOk = true;
     try {
-      app.db.get('SELECT 1 AS one');
+      await app.db.ping();
     } catch {
       dbOk = false;
     }

@@ -196,6 +196,8 @@
 - `jose` ходит за JWKS сам (внутри `createRemoteJWKSet`); правило «fetch только в client.ts» проверяет наш исходник, а не зависимости — адрес JWKS задаётся только конфигурацией.
 - Живые проверки с фоновыми процессами: их stdout нужно уводить в `/dev/null`, иначе конвейер `| head` ждёт вечно; результат писать в файл и читать после.
 - После squash-слияния PR ветка worktree расходится с `main` — новый срез начинать в новом worktree от `origin/main`, старый не трогать из-под guard.
+- Новые npm-пакеты ставить через `npx -y npm@11 install …`: npm 10 из окружения выкидывает поля `libc` из lock-файла, записанного npm 11 (лишний шумный diff).
+- Тесты SaaS поднимают настоящий PostgreSQL (`tests/helpers/postgres.ts`): под root — через `runuser -u postgres`; сервис подключается ролью без SUPERUSER/BYPASSRLS, иначе RLS не действует.
 - Облачные сессии: зависимости ставит SessionStart-хук `.claude/hooks/session-start.sh` (`npm ci` только при изменении `package-lock.json`; `npm install` не использовать — меняет lock и не запускает postinstall esbuild).
 - Параллельные агенты в worktree: worktree создаётся от `origin/main`, а не от локального HEAD — общий инфраструктурный коммит нужно сначала запушить (или агенту перемотать ветку `merge --ff-only`). Общие жёсткие списки в тестах (`mcp-inmemory`) — источник конфликтов; список read-инструментов теперь вычисляется из реестра.
 - Реестр ищет имя метода с учётом регистра, а `METHOD_NAME_RE` не пропускает заглавные: camelCase-методы Bitrix (`landing.site.getList`, `crm.type.getByEntityTypeId`, `disk.file.markDeleted`) регистрируются строчными — Bitrix имена методов не различает по регистру (подтвердить на портале).

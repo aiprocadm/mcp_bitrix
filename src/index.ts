@@ -9,6 +9,7 @@ import { AppError } from './errors/app-error.js';
 import { startHttp } from './mcp/http.js';
 import { startStdio } from './mcp/stdio.js';
 import { parseCliArgs } from './cli/args.js';
+import { startSaas } from './saas/main.js';
 
 async function main(): Promise<void> {
   const args = parseCliArgs(process.argv.slice(2), {
@@ -20,8 +21,30 @@ async function main(): Promise<void> {
     throw new AppError('CONFIG_INVALID', '--transport принимает stdio или http', { field: '--transport' });
   }
   const config = loadConfig({ configPath: args.values['config'] });
+  if (config.deployment.mode === 'saas') {
+    // SaaS-ТЗ §5.1: PROCESS_ROLE=web — HTTP-приложение; worker — задачи с лидером (docs/saas/runtime.md).
+    if (transportArg === 'stdio')
+      throw new AppError('CONFIG_INVALID', 'DEPLOYMENT_MODE=saas работает только по HTTP', {
+        field: '--transport',
+      });
+    const saas = await startSaas(config);
+    let stopping = false;
+    const stop = (signal: string) => {
+      if (stopping) return;
+      stopping = true;
+      saas.runtime.logger.info({ signal, role: saas.role }, 'shutting down');
+      void saas
+        .close()
+        .catch(() => undefined)
+        .finally(() => process.exit(0));
+    };
+    process.on('SIGTERM', () => stop('SIGTERM'));
+    process.on('SIGINT', () => stop('SIGINT'));
+    return;
+  }
   const transport = transportArg ?? config.server.transport;
   const app = createApp({ ...config, server: { ...config.server, transport } });
+  await app.ready;
 
   const handle = transport === 'http' ? await startHttp(app) : await startStdio(app);
 

@@ -11,6 +11,7 @@ async function main(): Promise<void> {
   const args = cliArgs(process.argv.slice(2));
   const config = cliConfig(args);
   const app = createApp(config, { logger: createSilentLogger() });
+  await app.ready;
   try {
     const r = await app.bitrix.call('legacy', 'profile', {}, { requestId: 'cli-profile', budgetMs: 15_000 });
     const p = pickProfile(r.result);

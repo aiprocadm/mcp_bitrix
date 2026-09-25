@@ -8,6 +8,7 @@ import { FileStaging } from '../../src/files/staging.js';
 import { detectMime, sanitizeFileName } from '../../src/files/validation.js';
 import { createSilentLogger } from '../../src/logging/logger.js';
 import { Database } from '../../src/storage/database.js';
+import { SqliteSqlDb } from '../../src/storage/sqlite-db.js';
 
 let root: string;
 let staging: FileStaging;
@@ -32,7 +33,7 @@ function make(
 ) {
   db = Database.open(':memory:');
   staging = new FileStaging(
-    db,
+    new SqliteSqlDb(db),
     {
       uploadRoot: path.join(root, 'inbox'),
       stagingDir: path.join(root, 'staging'),
@@ -43,6 +44,7 @@ function make(
       scanner: opts.scanner,
     },
     createSilentLogger(),
+    'local',
   );
 }
 
@@ -74,11 +76,11 @@ describe('staging файлов', () => {
     expect(m.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(m.scanStatus).toBe('skipped');
     expect(m.stagingPath.startsWith(path.join(root, 'staging'))).toBe(true);
-    const resolved = staging.resolve(m.token, 'owner');
+    const resolved = await staging.resolve(m.token, 'owner');
     expect(resolved.sha256).toBe(m.sha256);
     expect(staging.readVerified(resolved).toString()).toBe('привет, Bitrix\n');
-    expect(staging.listOwn('owner')).toHaveLength(1);
-    expect(staging.listOwn('owner')[0]).not.toHaveProperty('stagingPath');
+    expect(await staging.listOwn('owner')).toHaveLength(1);
+    expect((await staging.listOwn('owner'))[0]).not.toHaveProperty('stagingPath');
   });
 
   it('T25: traversal, файл вне root, симлинк, .env, относительный путь — отказ без чтения секрета', async () => {
@@ -108,7 +110,8 @@ describe('staging файлов', () => {
   it('T26: подмена staged-файла после подготовки → хеш не совпал, загрузка отменена', async () => {
     const m = await staging.stageFromPath(path.join(root, 'inbox', 'mcp-test.txt'), 'owner');
     writeFileSync(m.stagingPath, 'подменённый текст\n');
-    expect(() => staging.readVerified(staging.resolve(m.token, 'owner'))).toThrow(/изменилось/);
+    const resolved = await staging.resolve(m.token, 'owner');
+    expect(() => staging.readVerified(resolved)).toThrow(/изменилось/);
   });
 
   it('T27: невалидный base64, превышение размера — понятные ошибки, без мусора в staging', async () => {
@@ -135,11 +138,11 @@ describe('staging файлов', () => {
       /Eicar-Test-Signature/,
     );
     expect(manifests()).toBe(0);
-    expect(staging.listOwn('owner')).toEqual([]);
+    expect(await staging.listOwn('owner')).toEqual([]);
     make({ scanRequired: true, scanner: fakeScanner({ status: 'clean' }) });
     const m = await staging.stageUpload(Buffer.from('чистый файл'), 'clean.txt', 'owner');
     expect(m.scanStatus).toBe('clean');
-    expect(staging.readVerified(staging.resolve(m.token, 'owner')).toString()).toBe('чистый файл');
+    expect(staging.readVerified(await staging.resolve(m.token, 'owner')).toString()).toBe('чистый файл');
     // Манифест «skipped» при обязательном сканере не отправляется (защита от смены конфигурации после staging)
     expect(() => staging.readVerified({ ...m, scanStatus: 'skipped' })).toThrow(/антивирусную/);
   });
@@ -151,12 +154,12 @@ describe('staging файлов', () => {
 
   it('чужой principal и истёкший TTL не видят токен', async () => {
     const m = await staging.stageInline(b64('ok'), 'note.md', 'owner');
-    expect(() => staging.resolve(m.token, 'intruder')).toThrow(/не найден/);
-    expect(staging.listOwn('intruder')).toEqual([]);
+    await expect(staging.resolve(m.token, 'intruder')).rejects.toThrow(/не найден/);
+    expect(await staging.listOwn('intruder')).toEqual([]);
     make({ ttlSeconds: -1 });
     const m2 = await staging.stageInline(b64('ok'), 'note.md', 'owner');
-    expect(() => staging.resolve(m2.token, 'owner')).toThrow(/не найден/);
-    expect(staging.cleanupExpired()).toBe(0);
+    await expect(staging.resolve(m2.token, 'owner')).rejects.toThrow(/не найден/);
+    expect(await staging.cleanupExpired()).toBe(0);
   });
 });
 

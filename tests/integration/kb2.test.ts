@@ -242,7 +242,7 @@ describe('запись (REST 3.0)', () => {
     expect(prep.error?.details['plan']).toMatchObject({ details: { fields: { name: 'Новая база' } } });
     expect(t.bitrix.callsTo('note.collection.add')).toHaveLength(0);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('kb2_base_create', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({
       collectionId: 1000,
@@ -271,7 +271,7 @@ describe('запись (REST 3.0)', () => {
       details: { parentId: 10, title: 'Глава 3', content: { markdown: '## Глава 3\n\nТекст' } },
     });
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('kb2_document_create', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({
       documentId: 1000,
@@ -305,14 +305,14 @@ describe('запись (REST 3.0)', () => {
       idempotencyKey: randomUUID(),
     });
     expect(missing.error?.details['reason']).toBe('INVALID_PARENT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('note.document.add')).toHaveLength(0);
 
     // Родитель переехал между подтверждением и записью — precheck; портал ответил NOTE_INVALID_PARENT — тоже INVALID_PARENT
     const args = { collectionId: 1, parentId: 20, title: 'Y', idempotencyKey: randomUUID() };
     const prep = await call('kb2_document_create', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     t.bitrix.on('note.document.add', v3Error('NOTE_INVALID_PARENT'));
     const res = await call('kb2_document_create', { ...args, approvalId: operationId });
     expect(res.error?.code).toBe('VALIDATION_ERROR');
@@ -340,7 +340,7 @@ describe('запись (REST 3.0)', () => {
     const args = { collectionId: 1, title: 'Z', idempotencyKey: randomUUID() };
     const prep = await call('kb2_document_create', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     t.bitrix.on('note.document.add', { status: 200, body: { result: {} } });
     const res = await call('kb2_document_create', { ...args, approvalId: operationId });
     expect(res.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
@@ -382,7 +382,7 @@ describe('запись (REST 3.0)', () => {
     expect(plan.details).toMatchObject({ mode: 'append', baseContentHash: base, overwrite: false });
     expect(plan.risks.join(' ')).toContain('CAS');
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('kb2_document_update', { ...args, approvalId: operationId });
     const expected = `${DOC_TEXT}\n\nНовый абзац.`;
     expect(done.data).toMatchObject({
@@ -411,7 +411,7 @@ describe('запись (REST 3.0)', () => {
     });
     expect(stale.error?.code).toBe('CONFLICT');
     expect(stale.error?.details['reason']).toBe('COLLABORATIVE_EDIT_CONFLICT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const args = {
       documentId: 10,
@@ -422,7 +422,7 @@ describe('запись (REST 3.0)', () => {
     };
     const prep = await call('kb2_document_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     store.setMarkdown(10, `${DOC_TEXT}\n\nПравка коллеги`);
     const raced = await call('kb2_document_update', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -443,7 +443,7 @@ describe('запись (REST 3.0)', () => {
     };
     const prep = await call('kb2_document_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const res = await call('kb2_document_update', { ...args, approvalId: operationId });
     expect(res.error?.code).toBe('CONFLICT');
     expect(res.error?.details['reason']).toBe('COLLABORATIVE_EDIT_CONFLICT');
@@ -481,7 +481,7 @@ describe('запись (REST 3.0)', () => {
     expect(plan2.risks[0]).toContain('ЗАТРЁТ НЕСОХРАНЁННЫЕ ПРАВКИ');
     expect(prep2.error?.details['operationId']).not.toBe(operationId);
     const op2 = prep2.error?.details['operationId'] as string;
-    t.app.approvals.approve(op2, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(op2, 'owner', t.app.auth.portalKey);
     const done = await call('kb2_document_update', { ...forced, approvalId: op2 });
     expect(done.data).toMatchObject({ verified: true, contentHash: contentHash('Новый текст') });
     expect(t.bitrix.callsTo('note.document.update')[1]?.body['overwrite']).toBe(true);
@@ -500,7 +500,7 @@ describe('запись (REST 3.0)', () => {
     expect(plan.details['title']).toEqual({ from: 'Приложения', to: 'Приложения (2026)' });
     expect(plan.risks.join(' ')).toContain('expectedStateHash не передан');
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('kb2_document_update', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ verified: true });
     expect(t.bitrix.callsTo('note.document.update')[0]?.body).toEqual({
@@ -518,7 +518,7 @@ describe('запись (REST 3.0)', () => {
       dryRun: true,
     });
     expect(env.data).toMatchObject({ dryRun: true, stateHash: contentHash(DOC_TEXT) });
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('note.document.update')).toHaveLength(0);
   });
 

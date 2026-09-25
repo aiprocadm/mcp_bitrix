@@ -9,6 +9,7 @@ import {
 import { AppError } from '../../src/errors/app-error.js';
 import { SecretBox } from '../../src/security/crypto.js';
 import { Database } from '../../src/storage/database.js';
+import { SqliteSqlDb } from '../../src/storage/sqlite-db.js';
 import { AuditLog } from '../../src/logging/audit.js';
 import { createSilentLogger } from '../../src/logging/logger.js';
 
@@ -92,7 +93,7 @@ describe('crypto', () => {
 describe('database + audit', () => {
   it('миграции идемпотентны, транзакция откатывается', () => {
     const db = Database.open(':memory:');
-    expect(db.schemaVersion()).toBe(2);
+    expect(db.schemaVersion()).toBe(4);
     expect(() =>
       db.transaction(() => {
         db.run(
@@ -105,17 +106,17 @@ describe('database + audit', () => {
     db.close();
   });
 
-  it('T44: недоступный аудит запрещает запись, чтение остаётся', () => {
+  it('T44: недоступный аудит запрещает запись, чтение остаётся', async () => {
     const logger = createSilentLogger();
     const noDb = new AuditLog(undefined, Buffer.alloc(32, 1), logger, true, 90);
     expect(noDb.isAvailable()).toBe(false);
-    expect(() => noDb.assertAvailableForWrite()).toThrow(AppError);
+    await expect(noDb.assertAvailableForWrite()).rejects.toThrow(AppError);
     const disabled = new AuditLog(undefined, Buffer.alloc(32, 1), logger, false, 90);
-    expect(() => disabled.assertAvailableForWrite()).not.toThrow();
+    await expect(disabled.assertAvailableForWrite()).resolves.toBeUndefined();
 
     const db = Database.open(':memory:');
-    const audit = new AuditLog(db, Buffer.alloc(32, 1), logger, true, 90);
-    audit.record({
+    const audit = new AuditLog(new SqliteSqlDb(db), Buffer.alloc(32, 1), logger, true, 90);
+    await audit.record({
       requestId: 'r1',
       principalId: 'owner',
       portalKey: 'k',
@@ -127,7 +128,7 @@ describe('database + audit', () => {
     expect(row?.tool).toBe('x');
     expect(row?.principal_hash).not.toBe('owner');
     db.close();
-    audit.record({
+    await audit.record({
       requestId: 'r2',
       principalId: 'owner',
       portalKey: 'k',
@@ -135,6 +136,6 @@ describe('database + audit', () => {
       outcome: 'success',
     });
     expect(audit.isAvailable()).toBe(false);
-    expect(() => audit.assertAvailableForWrite()).toThrow(AppError);
+    await expect(audit.assertAvailableForWrite()).rejects.toThrow(AppError);
   });
 });

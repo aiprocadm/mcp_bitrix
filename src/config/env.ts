@@ -9,6 +9,7 @@
  *  - секреты после разбора регистрируются в редакторе и никогда не печатаются.
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { parse as parseDotenv } from 'dotenv';
 import { parseScannerUrl } from '../files/scanner.js';
@@ -16,6 +17,8 @@ import { z } from 'zod';
 import { AppError, configError } from '../errors/app-error.js';
 import { registerSecret } from '../security/redaction.js';
 import { ALL_MODULES, isModuleName, type ModuleName } from './modules.js';
+import type { OAuthServerSettings } from '../saas/oauth/settings.js';
+import { readOpsSettings, type OpsSettings } from '../saas/ops/settings.js';
 
 const strictBool = (name: string) =>
   z
@@ -55,6 +58,49 @@ const csv = z
   );
 
 const RawEnvSchema = z.object({
+  // Режим развёртывания (SaaS-ТЗ D14, §5.3, §15): single — как базовое ТЗ; saas — много арендаторов.
+  DEPLOYMENT_MODE: z.enum(['single', 'saas']).default('single'),
+  PUBLIC_BASE_URL: optionalString,
+  REDIS_URL: optionalString,
+  PROCESS_ROLE: z.enum(['web', 'worker']).default('web'),
+  KEK_FILE: optionalString,
+  B24_APP_CLIENT_ID: optionalString,
+  B24_APP_CLIENT_SECRET_FILE: optionalString,
+  B24_OAUTH_SERVER_URL: optionalString,
+  OAUTH_SIGNING_KEYS_DIR: optionalString,
+  YOOKASSA_SHOP_ID: optionalString,
+  YOOKASSA_SECRET_KEY_FILE: optionalString,
+  YOOKASSA_API_URL: optionalString,
+  SELLER_NAME: optionalString,
+  SELLER_INN: optionalString,
+  SELLER_TAX_SYSTEM_CODE: optionalString,
+  SELLER_VAT_CODE: optionalString,
+  SMTP_URL: optionalString,
+  MAIL_FROM: optionalString,
+  // SaaS: сервер авторизации MCP (S4, docs/saas/s4-oauth.md) — все необязательны, значения по умолчанию §7.1.
+  OAUTH_SIGNING_ALG: z.enum(['ES256', 'EdDSA']).optional(),
+  OAUTH_ACCESS_TOKEN_TTL_SEC: optionalString,
+  OAUTH_REFRESH_TOKEN_TTL_SEC: optionalString,
+  OAUTH_CODE_TTL_SEC: optionalString,
+  OAUTH_AUTH_REQUEST_TTL_SEC: optionalString,
+  OAUTH_KEY_ROTATION_SEC: optionalString,
+  OAUTH_DCR_LIMIT: optionalString,
+  OAUTH_DCR_WINDOW_SEC: optionalString,
+  OAUTH_CLIENT_RETENTION_DAYS: optionalString,
+  OAUTH_CIMD_ENABLED: optionalString,
+  OAUTH_CIMD_ALLOWED_HOSTS: csv,
+  // SaaS: эксплуатация (S8, docs/saas/s8-operations.md) — разбирает readOpsSettings.
+  REDIS_NAMESPACE: optionalString,
+  REDIS_COMMAND_TIMEOUT_MS: optionalString,
+  WORKER_LEASE_TTL_MS: optionalString,
+  WORKER_RENEW_INTERVAL_MS: optionalString,
+  WORKER_SHUTDOWN_GRACE_MS: optionalString,
+  WORKER_TASKS: optionalString,
+  WORKER_TASK_INTERVALS: optionalString,
+  PORTAL_LIMIT_FALLBACK_RPS: optionalString,
+  // SaaS: HTTP (docs/saas/runtime.md): доверенные прокси (адрес клиента из X-Forwarded-For) и токен /metrics.
+  TRUSTED_PROXIES: csv,
+  METRICS_TOKEN_FILE: optionalString,
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   MCP_SERVER_NAME: z.string().trim().min(1).default('bitrix24-mcp-server'),
   MCP_TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
@@ -162,8 +208,54 @@ export interface WebhookCredentials {
   readonly secret: string;
 }
 
+export interface DeploymentSettings {
+  readonly mode: 'single' | 'saas';
+  /** saas: публичный адрес сервиса (issuer, ресурс MCP, redirect). */
+  readonly publicBaseUrl: string | undefined;
+  /** saas: адрес Redis (секрет зарегистрирован в редакторе). */
+  readonly redisUrl: string | undefined;
+  /** saas: адрес PostgreSQL (секрет зарегистрирован в редакторе); в single — не используется. */
+  readonly postgresUrl: string | undefined;
+  readonly processRole: 'web' | 'worker';
+  /** Файлы секретов и публичные параметры saas (секреты читаются из файлов при сборке, не хранятся в конфиге). */
+  readonly files: {
+    readonly kek: string | undefined;
+    readonly b24ClientSecret: string | undefined;
+    readonly oauthSigningKeysDir: string | undefined;
+    readonly yookassaSecretKey: string | undefined;
+  };
+  readonly b24App: { readonly clientId: string | undefined; readonly oauthServerUrl: string | undefined };
+  readonly yookassa: { readonly shopId: string | undefined; readonly apiUrl: string | undefined };
+  readonly seller: {
+    readonly name: string | undefined;
+    readonly inn: string | undefined;
+    readonly taxSystemCode: string | undefined;
+    readonly vatCode: string | undefined;
+  };
+  readonly mail: { readonly smtpUrl: string | undefined; readonly from: string | undefined };
+  /** saas: параметры сервера авторизации MCP (OAUTH_*); секретов нет — ключи лежат в OAUTH_SIGNING_KEYS_DIR. */
+  readonly oauth: SaasOAuthEnv;
+  /** saas: Redis, worker, запасной лимит портала (REDIS_*, WORKER_*, PORTAL_LIMIT_FALLBACK_RPS); в single — нет. */
+  readonly ops: OpsSettings | undefined;
+  readonly http: {
+    /** Адреса/подсети прокси (nginx), которым доверяется X-Forwarded-For. Пусто — адрес соединения. */
+    readonly trustedProxies: readonly string[];
+    /** Файл с токеном доступа к /metrics (Bearer); без него /metrics — только с loopback. */
+    readonly metricsTokenFile: string | undefined;
+  };
+}
+
+/** Необязательные настройки сервера авторизации из окружения (дополняются в resolveOAuthSettings). */
+export type SaasOAuthEnv = Partial<
+  Omit<OAuthServerSettings, 'publicBaseUrl' | 'signingKeysDir' | 'cimd' | 'registrationRateLimit'>
+> & {
+  readonly registrationRateLimit?: { readonly limit: number; readonly windowSec: number };
+  readonly cimd?: { readonly enabled?: boolean; readonly allowedHosts?: readonly string[] };
+};
+
 export interface AppConfig {
   readonly raw: RawEnv;
+  readonly deployment: DeploymentSettings;
   /** Каталог, от которого считаются относительные пути (каталог .env). */
   readonly baseDir: string;
   readonly configPath: string | undefined;
@@ -369,6 +461,217 @@ function optionalInt(name: string, value: string | undefined): number | undefine
   return Number(value);
 }
 
+const isPostgresUrl = (v: string) => /^postgres(ql)?:\/\//i.test(v);
+
+/** Адрес сервиса без учётных данных; пароль регистрируется в редакторе, чтобы не попасть в логи. */
+function parseSecretServiceUrl(field: string, value: string | undefined, schemes: readonly string[]): string {
+  if (!value) throw configError(field, 'обязателен при DEPLOYMENT_MODE=saas');
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configError(field, 'не является корректным URL');
+  }
+  if (!schemes.includes(url.protocol)) throw configError(field, `ожидается схема ${schemes.join(' или ')}`);
+  if (url.password) registerSecret(decodeURIComponent(url.password));
+  registerSecret(value);
+  return value;
+}
+
+const EMPTY_SAAS = {
+  files: {
+    kek: undefined,
+    b24ClientSecret: undefined,
+    oauthSigningKeysDir: undefined,
+    yookassaSecretKey: undefined,
+  },
+  b24App: { clientId: undefined, oauthServerUrl: undefined },
+  yookassa: { shopId: undefined, apiUrl: undefined },
+  seller: { name: undefined, inn: undefined, taxSystemCode: undefined, vatCode: undefined },
+  mail: { smtpUrl: undefined, from: undefined },
+  oauth: {},
+  ops: undefined,
+  http: { trustedProxies: [], metricsTokenFile: undefined },
+} as const;
+
+function intSetting(field: string, value: string | undefined, min: number, max: number): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d+$/.test(value)) throw configError(field, 'ожидается целое число');
+  const n = Number(value);
+  if (n < min || n > max) throw configError(field, `допустимый диапазон ${String(min)}..${String(max)}`);
+  return n;
+}
+
+function boolSetting(field: string, value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw configError(field, 'допустимы только true или false');
+}
+
+/** OAUTH_* → частичные настройки сервера авторизации (инварианты проверяет resolveOAuthSettings при сборке). */
+function parseOAuthEnv(raw: RawEnv): SaasOAuthEnv {
+  const out: Record<string, unknown> = {};
+  const set = (k: string, v: unknown) => {
+    if (v !== undefined) out[k] = v;
+  };
+  set('signingAlg', raw.OAUTH_SIGNING_ALG);
+  set('accessTokenTtlSec', intSetting('OAUTH_ACCESS_TOKEN_TTL_SEC', raw.OAUTH_ACCESS_TOKEN_TTL_SEC, 1, 3600));
+  set(
+    'refreshTokenTtlSec',
+    intSetting('OAUTH_REFRESH_TOKEN_TTL_SEC', raw.OAUTH_REFRESH_TOKEN_TTL_SEC, 60, 365 * 86_400),
+  );
+  set('authCodeTtlSec', intSetting('OAUTH_CODE_TTL_SEC', raw.OAUTH_CODE_TTL_SEC, 1, 60));
+  set(
+    'authRequestTtlSec',
+    intSetting('OAUTH_AUTH_REQUEST_TTL_SEC', raw.OAUTH_AUTH_REQUEST_TTL_SEC, 60, 3600),
+  );
+  set(
+    'signingKeyRotationSec',
+    intSetting('OAUTH_KEY_ROTATION_SEC', raw.OAUTH_KEY_ROTATION_SEC, 3600, 365 * 86_400),
+  );
+  set(
+    'unusedClientRetentionDays',
+    intSetting('OAUTH_CLIENT_RETENTION_DAYS', raw.OAUTH_CLIENT_RETENTION_DAYS, 1, 3650),
+  );
+  const dcrLimit = intSetting('OAUTH_DCR_LIMIT', raw.OAUTH_DCR_LIMIT, 1, 100_000);
+  const dcrWindow = intSetting('OAUTH_DCR_WINDOW_SEC', raw.OAUTH_DCR_WINDOW_SEC, 1, 86_400);
+  if (dcrLimit !== undefined || dcrWindow !== undefined)
+    out['registrationRateLimit'] = { limit: dcrLimit ?? 10, windowSec: dcrWindow ?? 3600 };
+  const cimdEnabled = boolSetting('OAUTH_CIMD_ENABLED', raw.OAUTH_CIMD_ENABLED);
+  if (cimdEnabled !== undefined || raw.OAUTH_CIMD_ALLOWED_HOSTS.length > 0) {
+    out['cimd'] = {
+      ...(cimdEnabled !== undefined ? { enabled: cimdEnabled } : {}),
+      ...(raw.OAUTH_CIMD_ALLOWED_HOSTS.length
+        ? { allowedHosts: raw.OAUTH_CIMD_ALLOWED_HOSTS.map((h) => h.toLowerCase()) }
+        : {}),
+    };
+  }
+  return out;
+}
+
+/** Адрес или подсеть (CIDR) доверенного прокси. */
+function parseTrustedProxies(list: readonly string[]): string[] {
+  for (const entry of list) {
+    const [addr, prefix, extra] = entry.split('/');
+    const kind = addr ? isIP(addr) : 0;
+    const max = kind === 6 ? 128 : 32;
+    if (
+      !kind ||
+      extra !== undefined ||
+      (prefix !== undefined && !(/^\d+$/.test(prefix) && Number(prefix) <= max))
+    )
+      throw configError('TRUSTED_PROXIES', 'ожидается список IP-адресов или подсетей CIDR через запятую');
+  }
+  return [...list];
+}
+
+/** SaaS-ТЗ §15: опасные сочетания режима блокируют старт (как базовый T01). */
+function parseDeployment(raw: RawEnv, resolve: (p: string) => string): DeploymentSettings {
+  if (raw.DEPLOYMENT_MODE === 'single') {
+    if (isPostgresUrl(raw.DATABASE_URL))
+      throw configError('DATABASE_URL', 'PostgreSQL поддерживается только при DEPLOYMENT_MODE=saas');
+    return {
+      mode: 'single',
+      publicBaseUrl: undefined,
+      redisUrl: undefined,
+      postgresUrl: undefined,
+      processRole: 'web',
+      ...EMPTY_SAAS,
+    };
+  }
+  const base = parseServiceUrl(
+    'PUBLIC_BASE_URL',
+    raw.PUBLIC_BASE_URL,
+    'обязателен при DEPLOYMENT_MODE=saas: публичный https-адрес сервиса, например https://mcp.example.ru',
+  );
+  if (base.pathname !== '/' || base.search)
+    throw configError('PUBLIC_BASE_URL', 'только origin без пути и query, например https://mcp.example.ru');
+  if (raw.BITRIX_WEBHOOK_BASE_URL)
+    throw configError(
+      'BITRIX_WEBHOOK_BASE_URL',
+      'в SaaS вебхуки не используются: порталы подключаются тиражным приложением (SaaS-ТЗ D2)',
+    );
+  if (raw.MCP_TRANSPORT !== 'http')
+    throw configError('MCP_TRANSPORT', 'SaaS работает только по HTTP (stdio — для DEPLOYMENT_MODE=single)');
+  if (!isPostgresUrl(raw.DATABASE_URL))
+    throw configError(
+      'DATABASE_URL',
+      'при DEPLOYMENT_MODE=saas требуется PostgreSQL (postgres://…), SQLite — только single',
+    );
+  const postgresUrl = parseSecretServiceUrl('DATABASE_URL', raw.DATABASE_URL, ['postgres:', 'postgresql:']);
+  const redisUrl = parseSecretServiceUrl('REDIS_URL', raw.REDIS_URL, ['redis:', 'rediss:']);
+  const need = (field: string, v: string | undefined) => {
+    if (!v) throw configError(field, 'обязателен при DEPLOYMENT_MODE=saas');
+    return v;
+  };
+  if (raw.SELLER_INN && !/^(\d{10}|\d{12})$/.test(raw.SELLER_INN))
+    throw configError('SELLER_INN', 'ИНН — 10 или 12 цифр');
+  for (const [field, v] of [
+    ['B24_OAUTH_SERVER_URL', raw.B24_OAUTH_SERVER_URL],
+    ['YOOKASSA_API_URL', raw.YOOKASSA_API_URL],
+  ] as const) {
+    if (v) parseServiceUrl(field, v, 'https-адрес');
+  }
+  return {
+    mode: 'saas',
+    publicBaseUrl: base.origin,
+    redisUrl,
+    postgresUrl,
+    processRole: raw.PROCESS_ROLE,
+    files: {
+      kek: resolve(need('KEK_FILE', raw.KEK_FILE)),
+      b24ClientSecret: resolve(need('B24_APP_CLIENT_SECRET_FILE', raw.B24_APP_CLIENT_SECRET_FILE)),
+      oauthSigningKeysDir: resolve(need('OAUTH_SIGNING_KEYS_DIR', raw.OAUTH_SIGNING_KEYS_DIR)),
+      yookassaSecretKey: raw.YOOKASSA_SECRET_KEY_FILE ? resolve(raw.YOOKASSA_SECRET_KEY_FILE) : undefined,
+    },
+    b24App: {
+      clientId: need('B24_APP_CLIENT_ID', raw.B24_APP_CLIENT_ID),
+      oauthServerUrl: raw.B24_OAUTH_SERVER_URL,
+    },
+    yookassa: { shopId: raw.YOOKASSA_SHOP_ID, apiUrl: raw.YOOKASSA_API_URL },
+    seller: {
+      name: raw.SELLER_NAME,
+      inn: raw.SELLER_INN,
+      taxSystemCode: raw.SELLER_TAX_SYSTEM_CODE,
+      vatCode: raw.SELLER_VAT_CODE,
+    },
+    mail: {
+      smtpUrl: raw.SMTP_URL
+        ? parseSecretServiceUrl('SMTP_URL', raw.SMTP_URL, ['smtp:', 'smtps:'])
+        : undefined,
+      from: raw.MAIL_FROM,
+    },
+    oauth: parseOAuthEnv(raw),
+    ops: parseOps(raw, redisUrl),
+    http: {
+      trustedProxies: parseTrustedProxies(raw.TRUSTED_PROXIES),
+      metricsTokenFile: raw.METRICS_TOKEN_FILE ? resolve(raw.METRICS_TOKEN_FILE) : undefined,
+    },
+  };
+}
+
+/** REDIS_*, WORKER_*, PORTAL_LIMIT_FALLBACK_RPS через readOpsSettings (S8); ошибка → CONFIG_INVALID. */
+function parseOps(raw: RawEnv, redisUrl: string): OpsSettings {
+  try {
+    return readOpsSettings({
+      REDIS_URL: redisUrl,
+      REDIS_NAMESPACE: raw.REDIS_NAMESPACE,
+      REDIS_COMMAND_TIMEOUT_MS: raw.REDIS_COMMAND_TIMEOUT_MS,
+      WORKER_LEASE_TTL_MS: raw.WORKER_LEASE_TTL_MS,
+      WORKER_RENEW_INTERVAL_MS: raw.WORKER_RENEW_INTERVAL_MS,
+      WORKER_SHUTDOWN_GRACE_MS: raw.WORKER_SHUTDOWN_GRACE_MS,
+      WORKER_TASKS: raw.WORKER_TASKS,
+      WORKER_TASK_INTERVALS: raw.WORKER_TASK_INTERVALS,
+      PORTAL_LIMIT_FALLBACK_RPS: raw.PORTAL_LIMIT_FALLBACK_RPS,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'неверное значение';
+    const field = /^([A-Z][A-Z_]+)\b/.exec(message)?.[1] ?? 'WORKER_TASKS';
+    throw configError(field, message.replace(/^[A-Z][A-Z_]+:?\s*/, ''));
+  }
+}
+
 export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   const processEnv = options.processEnv ?? process.env;
   const cwd = options.cwd ?? process.cwd();
@@ -398,7 +701,16 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       message.startsWith(`${field}:`) ? message.slice(field.length + 1).trim() : message,
     );
   }
-  const raw = parsed.data;
+  const saas = parsed.data.DEPLOYMENT_MODE === 'saas';
+  // SaaS-ТЗ §15: в saas режим записи задают тариф и арендатор, READ_ONLY_MODE — аварийный выключатель
+  // (по умолчанию false); модули — тариф и администратор арендатора (по умолчанию включены все).
+  const raw: RawEnv = saas
+    ? {
+        ...parsed.data,
+        READ_ONLY_MODE: merged['READ_ONLY_MODE'] === undefined ? false : parsed.data.READ_ONLY_MODE,
+        ENABLED_MODULES: parsed.data.ENABLED_MODULES.length ? parsed.data.ENABLED_MODULES : [...ALL_MODULES],
+      }
+    : parsed.data;
 
   const resolve = (p: string) => path.resolve(baseDir, p);
 
@@ -424,7 +736,19 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   enabledModules.add('system');
 
   // Опасные сочетания (ТЗ §13 п.4, §8.1, §8.2).
-  if (raw.MCP_TRANSPORT === 'http' && !isLoopbackHost(raw.MCP_HOST) && raw.MCP_AUTH_MODE === 'local') {
+  // saas: каждый запрос /mcp проверяется собственным сервером авторизации (SaaS-ТЗ D5), внешний AS не используется.
+  if (saas && raw.MCP_AUTH_MODE === 'oauth') {
+    throw configError(
+      'MCP_AUTH_MODE',
+      'в saas сервис сам является сервером авторизации MCP; MCP_AUTH_MODE/MCP_AUTH_* не задаются',
+    );
+  }
+  if (
+    !saas &&
+    raw.MCP_TRANSPORT === 'http' &&
+    !isLoopbackHost(raw.MCP_HOST) &&
+    raw.MCP_AUTH_MODE === 'local'
+  ) {
     throw configError(
       'MCP_HOST',
       'внешний интерфейс запрещён при MCP_AUTH_MODE=local; допустим только loopback',
@@ -487,6 +811,12 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     throw configError('MAX_INLINE_FILE_BYTES', 'не может превышать MAX_UPLOAD_BYTES');
   }
   if (raw.UPLOAD_SCANNER_URL) parseScannerUrl(raw.UPLOAD_SCANNER_URL);
+  if (saas && raw.ADMIN_PANEL_ENABLED) {
+    throw configError(
+      'ADMIN_PANEL_ENABLED',
+      'в saas панель /admin не используется: подтверждения — в кабинете /app',
+    );
+  }
   if (raw.ADMIN_PANEL_ENABLED && raw.MCP_TRANSPORT !== 'http') {
     throw configError('ADMIN_PANEL_ENABLED', 'панель /admin работает только при MCP_TRANSPORT=http');
   }
@@ -496,6 +826,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (raw.ALLOW_REMOTE_FILE_URLS) {
     throw configError('ALLOW_REMOTE_FILE_URLS', 'загрузка по произвольным URL запрещена ТЗ §8.5');
   }
+
+  const deployment = parseDeployment(raw, resolve);
 
   const databasePath = raw.DATABASE_URL.startsWith('file:')
     ? resolve(raw.DATABASE_URL.slice('file:'.length))
@@ -507,6 +839,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
 
   return {
     raw,
+    deployment,
     baseDir,
     configPath: existsSync(configPath) ? configPath : undefined,
     server: {
@@ -606,6 +939,10 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
   return {
     configPath:
       config.configPath ?? '(файл .env не найден, используются значения по умолчанию и переменные процесса)',
+    deploymentMode: config.deployment.mode,
+    ...(config.deployment.mode === 'saas'
+      ? { publicBaseUrl: config.deployment.publicBaseUrl, processRole: config.deployment.processRole }
+      : {}),
     transport: config.server.transport,
     host: config.server.host,
     port: config.server.port,
@@ -622,7 +959,8 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
     enableRawRest: config.policy.enableRawRest,
     rawRestMode: config.policy.rawRestMode,
     dataDir: config.storage.dataDir,
-    databasePath: config.storage.databasePath,
+    // В saas путь не печатается: DATABASE_URL — адрес PostgreSQL с паролем.
+    ...(config.deployment.mode === 'single' ? { databasePath: config.storage.databasePath } : {}),
   };
 }
 

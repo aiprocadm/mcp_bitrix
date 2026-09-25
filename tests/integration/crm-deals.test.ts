@@ -215,7 +215,7 @@ describe('crm_create_record (§15.3, §8.2)', () => {
         details: { fields: { TITLE: '[MCP TEST] dry', OPPORTUNITY: 10 } },
       });
       expect((env.data?.['plan'] as { risks: string[] }).risks.join(' ')).toContain('CATEGORY_ID');
-      expect(t.app.operations.countByStatus()).toEqual({});
+      expect(await t.app.operations.countByStatus()).toEqual({});
       expect(t.bitrix.callsTo('crm.deal.add')).toHaveLength(0);
     });
 
@@ -237,7 +237,7 @@ describe('crm_create_record (§15.3, §8.2)', () => {
       expect(req.error?.code).toBe('VALIDATION_ERROR');
       expect(req.error?.details['field']).toBe('UF_CRM_SOURCE_DOC');
       expect(req.error?.message).toContain('Документ-основание');
-      expect(t.app.operations.countByStatus()).toEqual({});
+      expect(await t.app.operations.countByStatus()).toEqual({});
     });
 
     it('полный путь: APPROVAL_REQUIRED → подтверждение → одна запись → сверка по ID', async () => {
@@ -262,7 +262,7 @@ describe('crm_create_record (§15.3, §8.2)', () => {
       });
       expect(t.bitrix.callsTo('crm.deal.add')).toHaveLength(0);
 
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('crm_create_record', { ...args, approvalId: operationId });
       expect(done.success).toBe(true);
       expect(done.data).toMatchObject({
@@ -297,7 +297,7 @@ describe('crm_create_record (§15.3, §8.2)', () => {
       const args = { entityType: 'deal', fields: { TITLE: 'x', STAGE_ID: 'NEW' }, idempotencyKey: key };
       const prep = await call('crm_create_record', args);
       const operationId = prep.error?.details['operationId'] as string;
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('crm_create_record', { ...args, approvalId: operationId });
       expect(done.success).toBe(true);
       expect(done.data?.['verified']).toBe(true);
@@ -310,7 +310,7 @@ describe('crm_create_record (§15.3, §8.2)', () => {
       const args = { entityType: 'deal', fields: { TITLE: 'x' }, idempotencyKey: key };
       const prep = await call('crm_create_record', args);
       const operationId = prep.error?.details['operationId'] as string;
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('crm_create_record', { ...args, approvalId: operationId });
       expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
       const retry = await call('crm_create_record', { ...args, approvalId: operationId });

@@ -13,6 +13,7 @@ async function main(): Promise<void> {
   const filePath = args.values['path'];
   if (!filePath) fail(new Error('Укажите --path <абсолютный путь к файлу внутри UPLOAD_ROOT>'));
   const app = createApp(config, { logger: createSilentLogger() });
+  await app.ready;
   try {
     const m = await app.files.stageFromPath(filePath, app.principal.id);
     out(`Файл подготовлен: ${m.originalName} (${String(m.size)} байт, ${m.mime}), сканер: ${m.scanStatus}`);

@@ -46,7 +46,7 @@ export class ApprovalService {
     private readonly policyVersion: string,
   ) {}
 
-  prepare(input: {
+  async prepare(input: {
     tool: string;
     operationKind: OperationKind;
     principalId: string;
@@ -58,7 +58,7 @@ export class ApprovalService {
     expectedStateHash: string | null;
     fileHash: string | null;
     idempotencyKey: string | null;
-  }): PreparedApproval {
+  }): Promise<PreparedApproval> {
     const operationId = randomUUID();
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + this.ttlSeconds * 1000).toISOString();
@@ -72,7 +72,7 @@ export class ApprovalService {
       canonicalArgs: input.canonicalArgs,
       summary: input.summary,
     };
-    this.ops.createPrepared({
+    await this.ops.createPrepared({
       id: operationId,
       principalId: input.principalId,
       portalKey: input.portalKey,
@@ -90,24 +90,24 @@ export class ApprovalService {
     return { operationId, expiresAt };
   }
 
-  readPlan(
+  async readPlan(
     operationId: string,
     principalId: string,
     portalKey: string,
-  ): { view: OperationView; plan: StoredPlan } {
-    const row = this.ops.getOwn(operationId, principalId, portalKey);
+  ): Promise<{ view: OperationView; plan: StoredPlan }> {
+    const row = await this.ops.getOwn(operationId, principalId, portalKey);
     if (!row) throw new AppError('NOT_FOUND', 'Операция не найдена', { operationId });
     const plan = JSON.parse(this.box.decrypt(row.plan_encrypted, operationId)) as StoredPlan;
-    const view = this.ops.view(operationId, principalId, portalKey);
+    const view = await this.ops.view(operationId, principalId, portalKey);
     if (!view) throw new AppError('NOT_FOUND', 'Операция не найдена', { operationId });
     return { view, plan };
   }
 
   /** Вызывается только из интерактивной CLI после ручного ввода человека. */
-  approve(operationId: string, principalId: string, portalKey: string): OperationView {
-    const row = this.ops.getOwn(operationId, principalId, portalKey);
+  async approve(operationId: string, principalId: string, portalKey: string): Promise<OperationView> {
+    const row = await this.ops.getOwn(operationId, principalId, portalKey);
     if (!row) throw new AppError('NOT_FOUND', 'Операция не найдена', { operationId });
-    const r = this.ops.approve(operationId);
+    const r = await this.ops.approve(operationId);
     if (r === 'expired') {
       throw new AppError('APPROVAL_EXPIRED', 'Срок подтверждения истёк; создайте новый план', {
         operationId,
@@ -123,26 +123,26 @@ export class ApprovalService {
         },
       );
     }
-    const view = this.ops.view(operationId, principalId, portalKey);
+    const view = await this.ops.view(operationId, principalId, portalKey);
     if (!view) throw new AppError('INTERNAL_ERROR', 'Операция исчезла после подтверждения');
     return view;
   }
 
-  deny(operationId: string, principalId: string, portalKey: string): OperationView {
-    const row = this.ops.getOwn(operationId, principalId, portalKey);
+  async deny(operationId: string, principalId: string, portalKey: string): Promise<OperationView> {
+    const row = await this.ops.getOwn(operationId, principalId, portalKey);
     if (!row) throw new AppError('NOT_FOUND', 'Операция не найдена', { operationId });
-    if (!this.ops.deny(operationId)) {
+    if (!(await this.ops.deny(operationId))) {
       throw new AppError('CONFLICT', `Операция в состоянии ${row.status}; отклонить нельзя`, {
         operationId,
         status: row.status,
       });
     }
-    const view = this.ops.view(operationId, principalId, portalKey);
+    const view = await this.ops.view(operationId, principalId, portalKey);
     if (!view) throw new AppError('INTERNAL_ERROR', 'Операция исчезла после отказа');
     return view;
   }
 
-  listPending(principalId: string, portalKey: string): OperationView[] {
+  listPending(principalId: string, portalKey: string): Promise<OperationView[]> {
     return this.ops.listPending(principalId, portalKey);
   }
 

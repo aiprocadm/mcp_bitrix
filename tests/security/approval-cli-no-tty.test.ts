@@ -52,7 +52,9 @@ describe('approval:review без терминала', () => {
     expect(r.stdout).toContain('ПЛАН ОПЕРАЦИИ');
 
     const check = createApp(config, { logger: createSilentLogger() });
-    expect(check.operations.view(operationId, 'owner', check.auth.portalKey)?.status).toBe('prepared');
+    expect((await check.operations.view(operationId, 'owner', check.auth.portalKey))?.status).toBe(
+      'prepared',
+    );
     check.close();
   }, 40_000);
 });
