@@ -12,7 +12,7 @@ import { resolveLocalPrincipal, type Principal } from '../auth/principal.js';
 import { CAPABILITIES_TTL_MS, CapabilityService } from '../bitrix/capabilities.js';
 import { BitrixClient, type FetchLike } from '../bitrix/client.js';
 import { CursorStore } from '../bitrix/pagination.js';
-import { RateLimiter } from '../bitrix/rate-limiter.js';
+import { RateLimiter, type PortalLimiter } from '../bitrix/rate-limiter.js';
 import type { AppConfig } from '../config/env.js';
 import { loadPolicies, type Policies } from '../config/policy.js';
 import { AppError } from '../errors/app-error.js';
@@ -65,7 +65,7 @@ export interface Platform {
 export interface TenantScope {
   readonly tenantId: string;
   readonly auth: BitrixAuthProvider;
-  readonly limiter: RateLimiter;
+  readonly limiter: PortalLimiter;
   readonly bitrix: BitrixClient;
   readonly capabilities: CapabilityService;
   readonly cursors: CursorStore;
@@ -154,16 +154,20 @@ export interface TenantSpec {
    * В SaaS у каждого арендатора свой портал: только его хост.
    */
   readonly allowedHosts?: readonly string[];
+  /** Лимитер портала; по умолчанию — лимитер процесса. В SaaS — общий для кластера (S8, S15). */
+  readonly limiter?: PortalLimiter;
 }
 
 /** Контекст арендатора поверх общей платформы: свой клиент и лимитер портала, свои сервисы записи. */
 export function createTenantScope(platform: Platform, spec: TenantSpec): TenantScope {
   const { config, db, secretBox, audit, logger, policies } = platform;
-  const limiter = new RateLimiter({
-    requestsPerSecond: config.bitrix.requestsPerSecond,
-    maxConcurrency: config.bitrix.maxConcurrency,
-    maxQueueSize: config.bitrix.maxQueueSize,
-  });
+  const limiter =
+    spec.limiter ??
+    new RateLimiter({
+      requestsPerSecond: config.bitrix.requestsPerSecond,
+      maxConcurrency: config.bitrix.maxConcurrency,
+      maxQueueSize: config.bitrix.maxQueueSize,
+    });
   const bitrix = new BitrixClient({
     auth: spec.auth,
     fetch: platform.fetch,

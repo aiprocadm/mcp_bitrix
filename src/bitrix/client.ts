@@ -16,7 +16,7 @@ import {
 } from './legacy-adapter.js';
 import type { ApiVersion, MethodDescriptor } from './method-registry.js';
 import { findMethod } from './method-registry.js';
-import type { RateLimiter } from './rate-limiter.js';
+import type { PortalLimiter } from './rate-limiter.js';
 import {
   computeDelayMs,
   DEFAULT_RETRY,
@@ -59,7 +59,7 @@ export interface CallResult {
 export interface BitrixClientOptions {
   readonly auth: BitrixAuthProvider;
   readonly fetch: FetchLike;
-  readonly limiter: RateLimiter;
+  readonly limiter: PortalLimiter;
   readonly logger: AppLogger;
   readonly allowedHosts: readonly string[];
   readonly timeoutMs: number;

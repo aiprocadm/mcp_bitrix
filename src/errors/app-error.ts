@@ -30,6 +30,9 @@ export const ERROR_CODES = [
   'AUDIT_UNAVAILABLE',
   'ACCESS_DENIED',
   'RATE_LIMITED',
+  // SaaS-ТЗ §9.3: квота тарифа/лимит пользователя исчерпаны; §10.2: подписка не активна.
+  'QUOTA_EXCEEDED',
+  'SUBSCRIPTION_INACTIVE',
   'INTERNAL_ERROR',
 ] as const;
 

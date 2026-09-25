@@ -127,7 +127,9 @@ export async function dispatch(
       : envelope.error.code === 'READ_ONLY_MODE' ||
           envelope.error.code === 'ACCESS_DENIED' ||
           envelope.error.code === 'METHOD_NOT_ALLOWED' ||
-          envelope.error.code === 'RATE_LIMITED'
+          envelope.error.code === 'RATE_LIMITED' ||
+          envelope.error.code === 'QUOTA_EXCEEDED' ||
+          envelope.error.code === 'SUBSCRIPTION_INACTIVE'
         ? 'denied'
         : 'error',
     attempts: envelope.success ? envelope.meta.attempts : undefined,

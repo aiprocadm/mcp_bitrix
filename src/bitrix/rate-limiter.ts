@@ -18,7 +18,16 @@ export interface RateLimiterOptions {
   setTimeoutFn?: typeof setTimeout;
 }
 
-export class RateLimiter {
+/**
+ * Лимитер исходящих запросов к порталу: acquire() ждёт слот и возвращает release.
+ * Реализации: RateLimiter (процесс), кластерный лимитер SaaS (S8, суммарно по экземплярам).
+ */
+export interface PortalLimiter {
+  acquire(signal?: AbortSignal): Promise<() => void>;
+  stats(): { active: number; queued: number };
+}
+
+export class RateLimiter implements PortalLimiter {
   private active = 0;
   private readonly queue: Waiter[] = [];
   private lastStartTimes: number[] = [];
