@@ -5,39 +5,56 @@
 
 ## Текущее положение
 
-|                 |                                                                                                                                                                                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Дата обновления | 2026-09-25                                                                                                                                                                                                                                                                                             |
-| Текущий этап    | **S2 — PostgreSQL, RLS, конвертное шифрование** (ТЗ §6, D6, D7)                                                                                                                                                                                                                                        |
-| Следующий шаг   | S2, срез 1: адаптер `SqlDb` для PostgreSQL (пакет `pg`, `?`→`$n`, `withTenant` = транзакция + `set_config('app.tenant_id')`), миграции PG с RLS и ролью без BYPASSRLS, тестовый PostgreSQL (initdb во временном каталоге; без бинарников — явный skip), контрактные тесты хранилищ на SQLite и PG, S02 |
-| Открытый PR     | нет (проверить перед началом: открытые PR в `aiprocadm/mcp_bitrix`)                                                                                                                                                                                                                                    |
-| Реальные среды  | портал Bitrix24, магазин ЮKassa, домен, хостинг — не подключены (§20 ТЗ: действуют допущения)                                                                                                                                                                                                          |
+|                 |                                                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Дата обновления | 2026-09-25                                                                                                                                                                                  |
+| Текущий этап    | **S3–S8** — компоненты SaaS поверх общих интерфейсов (волна 1: S3, S4, S6/S7, S8; затем сборка режима saas; волна 2: S5, S9)                                                                |
+| Следующий шаг   | S3: тиражное приложение Bitrix24 (установка, `BitrixOAuthUserProvider`, обновление токенов single-flight через `Coordination`, `OnAppUninstall`, `app.info`) — см. «План этапов S3–S9» ниже |
+| Открытый PR     | нет (проверить перед началом: открытые PR в `aiprocadm/mcp_bitrix`)                                                                                                                         |
+| Реальные среды  | портал Bitrix24, магазин ЮKassa, домен, хостинг — не подключены (§20 ТЗ: действуют допущения)                                                                                               |
 
 ## Этапы (ТЗ §19)
 
-| Этап | Содержание                                        | Статус      | Где / доказательство                                                                                                                                                                         |
-| ---- | ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S0   | ТЗ, статус, правила продолжения, SessionStart-хук | ✅ 25.09    | `docs/saas/TZ-SaaS.md`, `docs/saas/STATUS.md`, `CLAUDE.md`, `.claude/skills/continue-tz/`, `.claude/hooks/`                                                                                  |
-| S1   | Контекст арендатора в ядре (SQLite)               | ✅ 25.09    | `src/app/container.ts`, `src/app/tenant-registry.ts`, `src/storage/sql.ts`, `sqlite-db.ts`, миграция 3; тесты `deployment-mode`, `tenant-scope`, `tenant-isolation` (S01), `tenant-registry` |
-| S2   | PostgreSQL, RLS, конвертное шифрование            | ⏭ следующий | —                                                                                                                                                                                            |
-| S3   | Тиражное приложение Bitrix24, OAuth пользователей | —           | —                                                                                                                                                                                            |
-| S4   | Сервер авторизации MCP                            | —           | —                                                                                                                                                                                            |
-| S5   | Кабинет клиента                                   | —           | —                                                                                                                                                                                            |
-| S6   | Тарифы, квоты, учёт                               | —           | —                                                                                                                                                                                            |
-| S7   | Биллинг (ЮKassa)                                  | —           | —                                                                                                                                                                                            |
-| S8   | Эксплуатация, масштабирование                     | —           | —                                                                                                                                                                                            |
-| S9   | Панель владельца, юр. шаблоны, Маркет             | —           | —                                                                                                                                                                                            |
-| S10  | Пилот и приёмка                                   | —           | —                                                                                                                                                                                            |
+| Этап | Содержание                                        | Статус   | Где / доказательство                                                                                                                                                                                                      |
+| ---- | ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0   | ТЗ, статус, правила продолжения, SessionStart-хук | ✅ 25.09 | `docs/saas/TZ-SaaS.md`, `docs/saas/STATUS.md`, `CLAUDE.md`, `.claude/skills/continue-tz/`, `.claude/hooks/`                                                                                                               |
+| S1   | Контекст арендатора в ядре (SQLite)               | ✅ 25.09 | `src/app/container.ts`, `src/app/tenant-registry.ts`, `src/storage/sql.ts`, `sqlite-db.ts`, миграция 3; тесты `deployment-mode`, `tenant-scope`, `tenant-isolation` (S01), `tenant-registry`                              |
+| S2   | PostgreSQL, RLS, конвертное шифрование            | ✅ 25.09 | `src/storage/postgres-db.ts`, `pg-migrations.ts` (+ `pg-migrations/*` по этапам), `src/saas/keyring.ts`, `coordination.ts`, `repos/tenants.ts`, `repos/plans.ts`; тесты `storage-contract` (SQLite+PG, S02), `saas-repos` |
+| S3   | Тиражное приложение Bitrix24, OAuth пользователей | —        | —                                                                                                                                                                                                                         |
+| S4   | Сервер авторизации MCP                            | —        | —                                                                                                                                                                                                                         |
+| S5   | Кабинет клиента                                   | —        | —                                                                                                                                                                                                                         |
+| S6   | Тарифы, квоты, учёт                               | —        | —                                                                                                                                                                                                                         |
+| S7   | Биллинг (ЮKassa)                                  | —        | —                                                                                                                                                                                                                         |
+| S8   | Эксплуатация, масштабирование                     | —        | —                                                                                                                                                                                                                         |
+| S9   | Панель владельца, юр. шаблоны, Маркет             | —        | —                                                                                                                                                                                                                         |
+| S10  | Пилот и приёмка                                   | —        | —                                                                                                                                                                                                                         |
 
-## План этапа S2 (срезы)
+## План этапов S3–S9 (интерфейсы для параллельной работы)
 
-1. Адаптер PostgreSQL `SqlDb` (`pg`): перевод `?`→`$n`, пул, `transaction`, `withTenant` (транзакция + `set_config('app.tenant_id', …, true)`), `ping`, `schemaVersion`.
-2. Миграции PostgreSQL: таблицы ядра (`operations`, `idempotency`, `cursors`, `audit`, `file_manifests`) с `tenant_id` и RLS; роль приложения без `BYPASSRLS`; служебная роль worker.
-3. Тестовый PostgreSQL: `initdb` во временном каталоге под непривилегированным пользователем (в CI — сервис); контрактные тесты хранилищ на обоих диалектах; S02 (запрос без/с чужим `app.tenant_id` → 0 строк).
-4. Конвертное шифрование (D7): таблица `tenant_keys` (DEK под KEK), `SecretBox` арендатора; криптоудаление.
-5. Схема и репозитории control plane SaaS (§6.2): `tenants`, `tenant_users`, `bitrix_tokens`, `mcp_clients`, `mcp_grants`/`mcp_refresh_tokens`, `plans`, `subscriptions`, `payments`, `invoices`, `usage_counters`, `tenant_settings`, `support_actions` — основа для S3–S9.
+Общие основы (готовы): `SqlDb`/`PostgresSqlDb` (RLS через `withTenant`), `TenantKeyRing` (DEK арендатора),
+`Coordination` (`InMemoryCoordination`; Redis — S8), репозитории `TenantsRepo`, `TenantUsersRepo`, `TenantSettingsRepo`,
+`PlansRepo`, `SubscriptionsRepo`, схема control plane (миграция PG 2). Новые миграции PostgreSQL — только в файле своего
+этапа `src/storage/pg-migrations/<этап>.ts` и только в его диапазоне номеров (S3: 30–39, S4: 40–49, S5/S9: 50–59,
+S6/S7: 60–79, S8: 80–89).
+
+- **S3** `src/saas/bitrix/*`: OAuth тиражного приложения (обмен code, refresh single-flight, хранение под DEK в `bitrix_tokens`), `BitrixOAuthUserProvider` (реализует `BitrixAuthProvider`), обработчики установки и `OnAppUninstall` (проверка `application_token`), `app.info`.
+- **S4** `src/saas/oauth/*`: сервер авторизации MCP (RFC 8414/9728/7591/8707, PKCE S256, коды, JWT, ротация refresh, отзыв, поколения), вход через Bitrix24 (использует S3), согласие.
+- **S6/S7** `src/saas/billing/*`: квоты и учёт (`QUOTA_EXCEEDED`, лимиты на пользователя), `PaymentProvider` + ЮKassa, жизненный цикл подписки §10.2, счета юрлицам, задачи worker.
+- **S8** `src/saas/ops/*`: `RedisCoordination`, общий лимитер портала (S15), worker с лидером, метрики, compose-профиль SaaS, бэкапы PG.
+- **Сборка режима saas** (после волны 1): `createSaasApp` — платформа на PostgreSQL, `TenantScopeRegistry`, диспетчер по токену, регистрация инструментов по тарифу.
+- **S5/S9** (волна 2): кабинет `/app`, подтверждения по `approvalUrl`, панель владельца `/owner`, юридические шаблоны, материалы Маркета.
 
 ## Сделано
+
+### S2 (2026-09-25): PostgreSQL, RLS, конвертное шифрование, control plane
+
+- `PostgresSqlDb` (`pg` 8.23): пул, `?`→`$n`, транзакции, `withTenant` = транзакция + `set_config('app.tenant_id')`; миграции под advisory-блокировкой; отказ старта под ролью superuser/BYPASSRLS (`assertRlsEnforced`).
+- Схема PG: ядро (миграция 1) и control plane (миграция 2: `tenants`, `tenant_users`, `bitrix_tokens`, `tenant_settings`, `mcp_clients`, `mcp_auth_codes`, `mcp_refresh_tokens`, `mcp_consents`, `plans`, `subscriptions`, `payments`, `invoices`, `usage_counters`, `cabinet_sessions`, `owner_users`, `support_actions`); RLS (ENABLE+FORCE) на 9 таблицах данных арендатора. Миграции этапов — в `pg-migrations/<этап>.ts` с непересекающимися номерами.
+- SQLite: миграция 4 — первичный ключ `idempotency` с арендатором (контрактный тест нашёл конфликт одинакового ключа у разных арендаторов).
+- `TenantKeyRing` (D7): DEK арендатора под KEK, AAD с id арендатора, криптоудаление. `Coordination` + `InMemoryCoordination` (блокировки, счётчики, окно лимита, pub/sub).
+- Репозитории: `TenantsRepo` (установка/переустановка, пробный период один раз, статусы), `TenantUsersRepo` (RLS, поколение токенов при отключении), `TenantSettingsRepo`, `PlansRepo` (тарифы §9.1 как данные, проверка), `SubscriptionsRepo`.
+- Тесты на **настоящем PostgreSQL 16** (временный кластер `initdb`, роль без привилегий): контракт хранилищ одинаков для SQLite и PG; S02 (без контекста и в чужом контексте — 0 строк, WITH CHECK, суперпользователь не пускается); control plane. +17 (499).
+- Не проверено: управляемый PostgreSQL провайдера, TLS до БД, нагрузка (S8).
 
 ### S1, срезы 2–4 (2026-09-25): асинхронные хранилища с арендатором, реестр контекстов, S01
 
@@ -69,6 +86,8 @@
 Формат: дата, этап, решение, почему, где в коде.
 
 - 2026-09-25, S1.1: `PUBLIC_BASE_URL` допускает `http://` только для loopback (как `MCP_PUBLIC_URL` базового ТЗ) — для локальной разработки SaaS; внешний адрес — только https. `src/config/env.ts` `parseDeployment`.
+- 2026-09-25, S2: тарифы, подписки, платежи, клиенты OAuth и учёт — в каталоге без RLS (нужны до выбора арендатора и владельцу; данных порталов нет); данные арендатора — под RLS. `src/storage/pg-migrations.ts`.
+- 2026-09-25, S2: кэш capabilities — в памяти процесса (промах = повторный `method.get`), а не в БД. `src/storage/memory-cache.ts`.
 - 2026-09-25, S1.1: файловое хранилище, панель `/admin` и output policy пока в `Platform` (общие); привязка файлов и политики к арендатору — срезы S1.2 и S5. `src/app/container.ts`.
 
 ## Грабли

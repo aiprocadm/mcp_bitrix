@@ -156,4 +156,27 @@ CREATE INDEX IF NOT EXISTS idx_audit_tenant_ts ON audit(tenant_id, ts);
 CREATE INDEX IF NOT EXISTS idx_file_manifests_tenant ON file_manifests(tenant_id, token);
 `,
   },
+  {
+    id: 4,
+    name: 'idempotency-tenant-pk',
+    // Первичный ключ idempotency с арендатором (как в PostgreSQL): один ключ у разных арендаторов не конфликтует.
+    sql: `
+CREATE TABLE idempotency_v4 (
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  principal_id TEXT NOT NULL,
+  portal_key TEXT NOT NULL,
+  tool TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  args_hash TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, principal_id, portal_key, tool, idempotency_key)
+);
+INSERT INTO idempotency_v4 (tenant_id, principal_id, portal_key, tool, idempotency_key, args_hash, operation_id, created_at, expires_at)
+  SELECT tenant_id, principal_id, portal_key, tool, idempotency_key, args_hash, operation_id, created_at, expires_at FROM idempotency;
+DROP TABLE idempotency;
+ALTER TABLE idempotency_v4 RENAME TO idempotency;
+`,
+  },
 ];
