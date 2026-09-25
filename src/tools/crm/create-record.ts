@@ -8,8 +8,14 @@ import { ok } from '../../mcp/result.js';
 import { requireIdempotencyUnlessDryRun, writeArgsShape } from '../../schemas/common.js';
 import { CREATE_ANNOTATIONS, defineTool } from '../types.js';
 import { asText, validateFieldsForWrite } from './deal-fields.js';
-import { classicEntity, entityTypeSchema, recordTitle, type ClassicEntity } from './entities.js';
+import { recordTitle, type ClassicEntity } from './entities.js';
 import { assertStageValid, compareFields, createRecord, getFieldsMeta, getRecord } from './crm-service.js';
+import {
+  entityTypeIdSchema,
+  itemCreateEnvelope,
+  recordEntityTypeSchema,
+  resolveRecordTarget,
+} from './item-ops.js';
 
 export const crmFieldValue = z.union([
   z.string().max(20_000),
@@ -23,9 +29,10 @@ export const crmFieldValue = z.union([
 ]);
 
 export const crmFieldsSchema = z
-  .record(z.string().regex(/^[A-Z][A-Z0-9_]{0,99}$/, 'имена полей — ВЕРХНИЙ_РЕГИСТР'), crmFieldValue)
+  .record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,99}$/, 'имя поля: буквы, цифры, _'), crmFieldValue)
   .describe(
-    'Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР, пользовательские UF_CRM_*',
+    'Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР (TITLE, UF_CRM_*); ' +
+      'smart/invoice (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится',
   );
 
 function createRisks(entity: ClassicEntity, fields: Record<string, unknown>): string[] {
@@ -52,7 +59,8 @@ export const crmCreateRecordTool = defineTool({
   module: 'crm',
   title: 'Создать запись CRM',
   description:
-    'Создать запись классического CRM: сделку, лид, контакт или компанию (crm.<entity>.add). Поля проверяются по схеме портала ' +
+    'Создать запись CRM: сделку, лид, контакт, компанию (crm.<entity>.add, поля ВЕРХНИЙ_РЕГИСТР) либо элемент смарт-процесса ' +
+    '(entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.add (поля camelCase). Поля проверяются по схеме портала ' +
     '(crm_fields_get): неизвестные и read-only отклоняются, обязательные должны быть заполнены, стадия/статус — по справочнику. ' +
     'Использовать, когда пользователь явно просит создать запись. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED ' +
     'с operationId и планом — запись ещё не сделана; человек подтверждает план (CLI или панель); повторный вызов с теми же ' +
@@ -62,14 +70,16 @@ export const crmCreateRecordTool = defineTool({
   requiresBitrix: true,
   inputSchema: z
     .object({
-      entityType: entityTypeSchema,
+      entityType: recordEntityTypeSchema,
+      entityTypeId: entityTypeIdSchema.optional(),
       fields: crmFieldsSchema,
       ...writeArgsShape,
     })
     .strict()
     .superRefine(requireIdempotencyUnlessDryRun),
   outputDataSchema: z.object({
-    entityType: entityTypeSchema,
+    entityType: recordEntityTypeSchema,
+    entityTypeId: z.number().optional(),
     dryRun: z.boolean().optional(),
     plan: z.record(z.string(), z.unknown()).optional(),
     validationLevel: z.string().optional(),
@@ -80,7 +90,17 @@ export const crmCreateRecordTool = defineTool({
     record: z.record(z.string(), z.unknown()).optional(),
   }),
   handler: async (args, ctx) => {
-    const entity = classicEntity(args.entityType);
+    const resolved = await resolveRecordTarget(ctx, args.entityType, args.entityTypeId);
+    if (resolved.kind === 'item') {
+      const { envelope } = await itemCreateEnvelope(ctx, resolved.target, {
+        tool: 'crm_create_record',
+        rawFields: args.fields,
+        args,
+        base: { entityType: args.entityType, entityTypeId: resolved.target.entityTypeId },
+      });
+      return envelope;
+    }
+    const entity: ClassicEntity = resolved.entity;
     const meta = await getFieldsMeta(ctx, entity);
     const fields = validateFieldsForWrite(args.fields, meta, 'create');
     await assertStageValid(ctx, entity, fields, undefined);

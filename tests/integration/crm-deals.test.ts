@@ -68,11 +68,18 @@ describe('crm_fields_get', () => {
     expect(t.bitrix.callsTo('crm.deal.fields')).toHaveLength(2);
   });
 
-  it('entityType вне классических сущностей (smart, invoice) отклоняется схемой', async () => {
-    for (const entityType of ['smart', 'invoice', 'DEAL']) {
+  it('неизвестный entityType отклоняется схемой; smart без entityTypeId — VALIDATION_ERROR без обращения к порталу', async () => {
+    for (const entityType of ['quote', 'DEAL']) {
       const r = await client.callTool({ name: 'crm_fields_get', arguments: { entityType } });
       expect(r.isError, entityType).toBe(true);
     }
+    const before = t.bitrix.calls.length;
+    const smart = await call('crm_fields_get', { entityType: 'smart' });
+    expect(smart.error?.code).toBe('VALIDATION_ERROR');
+    expect(smart.error?.details['reason']).toBe('ENTITY_TYPE_ID_REQUIRED');
+    const classic = await call('crm_fields_get', { entityType: 'deal', entityTypeId: 2 });
+    expect(classic.error?.details['reason']).toBe('UNEXPECTED_ENTITY_TYPE_ID');
+    expect(t.bitrix.calls.length).toBe(before);
   });
 });
 
