@@ -108,7 +108,26 @@ export function enforceResponseLimit(envelope: Envelope, maxBytes: number): Enve
   const size = (v: unknown) => Buffer.byteLength(JSON.stringify(v), 'utf8');
   if (size(envelope) <= maxBytes) return envelope;
   if (!envelope.success) {
-    return { ...envelope, error: { ...envelope.error, details: {} } };
+    // Большой план не должен терять operationId/срок: без них подтверждение невозможно.
+    // План целиком остаётся в хранилище операций и показывается в approval:review / панели.
+    const keep: Record<string, unknown> = {};
+    for (const k of ['operationId', 'expiresAt', 'field', 'reason', 'method', 'apiVersion', 'upstreamCode']) {
+      const v = (envelope.error.details as Record<string, unknown>)[k];
+      if (v !== undefined) keep[k] = v;
+    }
+    const plan = (envelope.error.details as Record<string, unknown>)['plan'];
+    if (plan && typeof plan === 'object') {
+      const p = plan as Record<string, unknown>;
+      keep['plan'] = {
+        ...(p['action'] !== undefined ? { action: p['action'] } : {}),
+        ...(p['target'] !== undefined ? { target: p['target'] } : {}),
+        truncated: true,
+      };
+    }
+    keep['nextAction'] =
+      'План не поместился в ответ (MAX_RESPONSE_BYTES): полный план — в npm run approval:review -- --id <operationId>';
+    const slim: Envelope = { ...envelope, error: { ...envelope.error, details: keep as ErrorDetails } };
+    return size(slim) <= maxBytes ? slim : { ...envelope, error: { ...envelope.error, details: {} } };
   }
   const data = envelope.data as { items?: unknown[] } | null;
   if (data && typeof data === 'object' && Array.isArray(data.items) && data.items.length > 1) {

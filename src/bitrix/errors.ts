@@ -52,7 +52,8 @@ export function mapUpstreamError(
   const code = up.upstreamCode ?? '';
   let mapped: ErrorCode | undefined = EXACT[code];
   if (!mapped) {
-    if (/NOT_FOUND/i.test(code)) mapped = 'NOT_FOUND';
+    // REST 3.0: BITRIX_REST_V3_EXCEPTION_ENTITYNOTFOUNDEXCEPTION и т. п.
+    if (/NOT_?FOUND/i.test(code)) mapped = 'NOT_FOUND';
     else if (/ACCESS|PERMISSION|DENIED/i.test(code)) mapped = 'BITRIX_ACCESS_DENIED';
     else if (/SCOPE/i.test(code)) mapped = 'BITRIX_SCOPE_MISSING';
     else if (/LIMIT/i.test(code)) mapped = 'BITRIX_RATE_LIMITED';
