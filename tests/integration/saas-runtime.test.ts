@@ -20,7 +20,8 @@ import { ENTITLEMENTS_CHANNEL } from '../../src/saas/billing/entitlements.js';
 import { approvalShortCode } from '../../src/saas/dispatch-hooks.js';
 import { startSaasHttp, type SaasHttpHandle } from '../../src/saas/http.js';
 import { createSaasRuntime, type SaasRuntime } from '../../src/saas/runtime.js';
-import { createWorkerTasks } from '../../src/saas/worker-tasks.js';
+import { saasWebHttpOptions } from '../../src/saas/web.js';
+import { createWorkerTasks, tenantsDueForDeletion } from '../../src/saas/worker-tasks.js';
 import { startSaas } from '../../src/saas/main.js';
 import { TASK_FIELDS, taskRecord } from '../helpers/mock-bitrix.js';
 import { testConfig, structured } from '../helpers/app.js';
@@ -105,7 +106,7 @@ describe.skipIf(!PG_AVAILABLE || !REDIS_AVAILABLE)(
         startUsageFlush: false,
         resolveHost: () => Promise.resolve(['93.184.216.34']),
       });
-      http = await startSaasHttp(rt, { host: '127.0.0.1', port: 0 });
+      http = await startSaasHttp(rt, { ...saasWebHttpOptions(rt), host: '127.0.0.1', port: 0 });
       base = `http://127.0.0.1:${String(http.port)}`;
 
       cloud.extraMethods.set('tasks.task.getfields', () => ({ result: TASK_FIELDS }));
@@ -338,6 +339,26 @@ describe.skipIf(!PG_AVAILABLE || !REDIS_AVAILABLE)(
         req.end();
       });
       expect(evilStatus).toBe(403);
+    });
+
+    it('кабинет /app и панель /owner смонтированы; обратный вызов Bitrix24 с state кабинета уходит кабинету', async () => {
+      const app = await fetch(`${base}/app/approvals/00000000-0000-4000-8000-000000000000`, {
+        redirect: 'manual',
+      });
+      expect([302, 303]).toContain(app.status);
+      expect(app.headers.get('location') ?? '').toContain('/app/login');
+      const owner = await fetch(`${base}/owner/login`);
+      expect(owner.status).toBe(200);
+      expect(owner.headers.get('content-security-policy') ?? '').toContain("frame-ancestors 'none'");
+      // state кабинета без cookie браузера — отказ кабинета (не 404 «нет обработчика») и без обращения к Bitrix24.
+      const cb = await fetch(
+        `${base}/b24/oauth/callback?state=cab.${'x'.repeat(40)}&code=c&domain=x.bitrix24.ru`,
+        {
+          redirect: 'manual',
+        },
+      );
+      expect(cb.status).not.toBe(404);
+      expect(cb.status).toBeLessThan(500);
     });
 
     it('/mcp без токена → 401 с WWW-Authenticate и resource_metadata', async () => {
@@ -599,6 +620,27 @@ describe.skipIf(!PG_AVAILABLE || !REDIS_AVAILABLE)(
       expect(again.status).toBe(200);
     });
 
+    it('§6.3: через 30 дней после удаления приложения данные арендатора криптоудаляются задачей worker', async () => {
+      // Путь «удалено приложение»: отметку биллинга (renewDue выше мог её поставить) снимаем.
+      await rt.db.run(
+        'UPDATE subscriptions SET deletion_requested_at = NULL WHERE tenant_id = ?',
+        b.tenantId,
+      );
+      expect(await tenantsDueForDeletion(rt, Date.now())).not.toContain(b.tenantId);
+      await rt.db.run(
+        'UPDATE tenants SET uninstalled_at = ? WHERE id = ?',
+        new Date(Date.now() - 31 * 86_400_000).toISOString(),
+        b.tenantId,
+      );
+      expect(await tenantsDueForDeletion(rt, Date.now())).toEqual([b.tenantId]);
+      const task = createWorkerTasks(rt).find((t) => t.name === 'retention.data_deletion');
+      await task?.run(new AbortController().signal);
+      expect((await rt.repos.tenants.get(b.tenantId))?.status).toBe('deleted');
+      expect(await tenantsDueForDeletion(rt, Date.now())).toEqual([]);
+      // Соседний арендатор не тронут.
+      expect((await rt.repos.tenants.get(a.tenantId))?.status).toBe('active');
+    });
+
     it('задачи worker выполняются на настоящих хранилищах', async () => {
       const tasks = createWorkerTasks(rt);
       expect(tasks.map((t) => t.name).sort()).toEqual(
@@ -608,6 +650,7 @@ describe.skipIf(!PG_AVAILABLE || !REDIS_AVAILABLE)(
           'bitrix.token_refresh',
           'oauth.dcr_cleanup',
           'retention.cleanup',
+          'retention.data_deletion',
           'usage.flush',
         ].sort(),
       );

@@ -9,6 +9,7 @@
  *  - сессия: случайный cookie (в БД только SHA-256), CSRF-токен на сессию, абсолютный срок 8 ч и 30 мин бездействия.
  * Пароль, секрет TOTP, код и cookie в логи не попадают.
  */
+import { parseKek } from '../keyring.js';
 import {
   createHash,
   hkdfSync,
@@ -79,10 +80,8 @@ export function readKekFile(filePath: string): Buffer {
   } catch {
     throw new AppError('CONFIG_INVALID', 'Файл KEK не читается', { field: 'KEK_FILE' });
   }
-  const text = raw.toString('utf8').trim();
-  if (/^[0-9a-fA-F]{64}$/.test(text)) return Buffer.from(text, 'hex');
-  if (raw.length === 32) return raw;
-  throw new AppError('CONFIG_INVALID', 'KEK: ожидается 64 hex-символа или 32 байта', { field: 'KEK_FILE' });
+  // Тот же разбор, что у сборки saas: секреты TOTP, созданные CLI, расшифровываются веб-процессом.
+  return parseKek(raw);
 }
 
 /** Email владельца: нижний регистр, простой формат. */

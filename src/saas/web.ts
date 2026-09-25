@@ -1,26 +1,20 @@
 /**
  * Сборка веб-приложения режима saas из частей (SaaS-ТЗ §5.1, §11): MCP + сервер авторизации (src/saas/http.ts),
- * кабинет клиента `/app` (S5) и, если передана, панель владельца `/owner` (S9) — через `extraRoutes`.
+ * кабинет клиента `/app` (S5) и панель владельца `/owner` (S9) — через `extraRoutes`.
  * Обратный вызов Bitrix24 с `state` кабинета уходит кабинету; с `state` сервера авторизации — серверу авторизации.
  */
 import type { FastifyInstance } from 'fastify';
 import { createCabinet, type Cabinet } from './cabinet/index.js';
 import type { CabinetDeps } from './cabinet/types.js';
 import type { SaasHttpOptions } from './http.js';
+import { registerOwnerPanel, type OwnerPanelDeps } from './owner/index.js';
 import type { SaasRuntime } from './runtime.js';
-import { TenantDataDeletion } from './tenant-deletion.js';
+import { tenantDeletionFromRuntime } from './tenant-deletion.js';
 
 /** Зависимости кабинета из собранного runtime: тот же ApprovalService и ключ планов, что исполняют вызовы MCP. */
 export function cabinetDepsFromRuntime(rt: SaasRuntime): CabinetDeps {
   const revokeTenant = (tenantId: string) => rt.oauth.server.revokeTenant(tenantId);
-  const deletion = new TenantDataDeletion({
-    db: rt.db,
-    keys: rt.keyring,
-    fileStaging: rt.fileStaging,
-    revokeTenant,
-    coordination: rt.coordination,
-    logger: rt.logger,
-  });
+  const deletion = tenantDeletionFromRuntime(rt);
   const files = rt.config.files;
   return {
     publicBaseUrl: rt.publicBaseUrl,
@@ -50,7 +44,27 @@ export function cabinetDepsFromRuntime(rt: SaasRuntime): CabinetDeps {
   };
 }
 
+/** Зависимости панели владельца из runtime: данные арендаторов не читает, только сводки и биллинг. */
+export function ownerDepsFromRuntime(rt: SaasRuntime): OwnerPanelDeps {
+  return {
+    db: rt.db,
+    ownerSecrets: rt.ownerSecrets,
+    tenants: rt.repos.tenants,
+    plans: rt.repos.plans,
+    subscriptions: rt.repos.subscriptions,
+    billing: rt.billing.subscriptions,
+    coordination: rt.coordination,
+    revokeTenant: (tenantId) => rt.oauth.server.revokeTenant(tenantId),
+    entitlements: rt.billing.entitlements,
+    metrics: rt.metrics.registry,
+    logger: rt.logger,
+    publicOrigin: new URL(rt.publicBaseUrl).origin,
+  };
+}
+
 export interface SaasWebOptions {
+  /** false — не регистрировать панель владельца `/owner` на этом экземпляре. */
+  readonly ownerPanel?: boolean;
   /** Дополнительные разделы (панель владельца `/owner`) — регистрируются рядом с кабинетом. */
   readonly extraRoutes?: (app: FastifyInstance) => void | Promise<void>;
   /** Для тестов: готовый кабинет вместо собранного из runtime. */
@@ -65,6 +79,7 @@ export function saasWebHttpOptions(rt: SaasRuntime, opts: SaasWebOptions = {}): 
     cabinetCallback: (req, reply) => cabinet.replyBitrixCallback(req, reply),
     extraRoutes: async (app) => {
       cabinet.register(app);
+      if (opts.ownerPanel !== false) registerOwnerPanel(app, ownerDepsFromRuntime(rt));
       if (extra) await extra(app);
     },
   };

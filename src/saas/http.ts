@@ -167,7 +167,13 @@ export async function buildSaasHttpApp(
   const publicUrl = new URL(rt.publicBaseUrl);
   const trusted = buildBlockList(cfg.deployment.http.trustedProxies);
   const secureTransport = publicUrl.protocol === 'https:';
-  const fastify = Fastify({ bodyLimit: opts.bodyLimit ?? 1_048_576, trustProxy: false, logger: false });
+  // request.ip (им пользуются лимиты входа кабинета и панели владельца) — по тем же правилам, что clientIp:
+  // X-Forwarded-For учитывается только от доверенных прокси TRUSTED_PROXIES.
+  const fastify = Fastify({
+    bodyLimit: opts.bodyLimit ?? 1_048_576,
+    trustProxy: trusted ? (address: string) => inList(trusted, normalizeIp(address)) : false,
+    logger: false,
+  });
 
   // Host: публичный домен, дополнительные из MCP_ALLOWED_HOSTS и loopback (проверки здоровья внутри контейнера).
   fastify.addHook(

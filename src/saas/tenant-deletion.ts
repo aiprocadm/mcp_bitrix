@@ -14,6 +14,7 @@
  * «пробный период один раз на портал», §9.1) со статусом `deleted`; подписка — остановлена (`canceled`),
  * её зашифрованные поля очищены. Запись о факте удаления — в `support_actions` (журнал вне данных арендатора).
  */
+import type { SaasRuntime } from './runtime.js';
 import type { AppLogger } from '../logging/logger.js';
 import type { FileStaging } from '../files/staging.js';
 import type { SqlDb } from '../storage/sql.js';
@@ -135,4 +136,20 @@ export class TenantDataDeletion {
     this.d.logger.warn({ tenantId, filesRemoved }, 'tenant data deleted');
     return { tenantId, deletedAt: at, filesRemoved, rowsDeleted, keyDestroyed: true };
   }
+}
+
+/** Удаление из собранного runtime режима saas (кабинет, панель владельца, задача worker — один порядок действий). */
+export function tenantDeletionFromRuntime(
+  rt: Pick<SaasRuntime, 'db' | 'keyring' | 'fileStaging' | 'coordination' | 'logger'> & {
+    readonly oauth: { readonly server: Pick<SaasRuntime['oauth']['server'], 'revokeTenant'> };
+  },
+): TenantDataDeletion {
+  return new TenantDataDeletion({
+    db: rt.db,
+    keys: rt.keyring,
+    fileStaging: rt.fileStaging,
+    revokeTenant: (tenantId) => rt.oauth.server.revokeTenant(tenantId),
+    coordination: rt.coordination,
+    logger: rt.logger,
+  });
 }

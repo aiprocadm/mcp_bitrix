@@ -6,7 +6,7 @@
  * KEK — вне БД и бэкапов (файл 0600 или KMS), в БД не попадает никогда.
  */
 import { randomBytes } from 'node:crypto';
-import { AppError } from '../errors/app-error.js';
+import { AppError, configError } from '../errors/app-error.js';
 import { SecretBox } from '../security/crypto.js';
 import type { SqlExecutor } from '../storage/sql.js';
 
@@ -67,4 +67,16 @@ export class TenantKeyRing {
   forget(tenantId: string): void {
     this.cache.delete(tenantId);
   }
+}
+
+/** KEK: 64 hex-символа (как `openssl rand -hex 32`), base64 32 байт или 32 байта как есть. */
+export function parseKek(content: Buffer): Buffer {
+  const text = content.toString('utf8').trim();
+  if (/^[0-9a-fA-F]{64}$/.test(text)) return Buffer.from(text, 'hex');
+  if (/^[A-Za-z0-9+/]{43}=$/.test(text)) return Buffer.from(text, 'base64');
+  if (content.length === 32) return Buffer.from(content);
+  throw configError(
+    'KEK_FILE',
+    'ожидается 32 байта: 64 hex-символа (openssl rand -hex 32), base64 или двоичный файл',
+  );
 }

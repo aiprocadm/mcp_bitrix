@@ -71,7 +71,8 @@ import {
 } from './bitrix/index.js';
 import type { Coordination } from './coordination.js';
 import { ReachCountingLimiter, saasDispatchHooks } from './dispatch-hooks.js';
-import { TenantKeyRing } from './keyring.js';
+import { parseKek, TenantKeyRing } from './keyring.js';
+import { ownerSecretsBox } from './owner/accounts.js';
 import type { HostResolver } from './oauth/cimd-fetch.js';
 import {
   AuthorizationServer,
@@ -175,6 +176,8 @@ export interface SaasRuntime {
   readonly platform: Platform;
   readonly db: PostgresSqlDb;
   readonly keyring: TenantKeyRing;
+  /** Ключ секретов TOTP панели владельца (HKDF от KEK; тот же, что у CLI `npm run owner`). */
+  readonly ownerSecrets: SecretBox;
   readonly coordination: Coordination;
   readonly metrics: SaasMetrics;
   readonly registry: TenantScopeRegistry;
@@ -201,17 +204,7 @@ export interface SaasRuntime {
   close(): Promise<void>;
 }
 
-/** KEK: 64 hex-символа (как `openssl rand -hex 32`), base64 32 байт или 32 байта как есть. */
-export function parseKek(content: Buffer): Buffer {
-  const text = content.toString('utf8').trim();
-  if (/^[0-9a-fA-F]{64}$/.test(text)) return Buffer.from(text, 'hex');
-  if (/^[A-Za-z0-9+/]{43}=$/.test(text)) return Buffer.from(text, 'base64');
-  if (content.length === 32) return Buffer.from(content);
-  throw configError(
-    'KEK_FILE',
-    'ожидается 32 байта: 64 hex-символа (openssl rand -hex 32), base64 или двоичный файл',
-  );
-}
+export { parseKek } from './keyring.js';
 
 const derive = (kek: Buffer, label: string): Buffer =>
   Buffer.from(hkdfSync('sha256', kek, Buffer.alloc(0), `mcp-saas:${label}`, 32));
@@ -581,6 +574,7 @@ export async function createSaasRuntime(
       platform,
       db,
       keyring,
+      ownerSecrets: ownerSecretsBox(kek),
       coordination,
       metrics,
       registry,

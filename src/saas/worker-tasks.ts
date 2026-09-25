@@ -15,6 +15,7 @@ import type { Tenant, TenantStatus } from './repos/tenants.js';
 import { WORKER_TASK_NAMES } from './ops/settings.js';
 import type { WorkerTask } from './ops/worker.js';
 import type { SaasRuntime } from './runtime.js';
+import { tenantDeletionFromRuntime } from './tenant-deletion.js';
 
 export interface WorkerTaskOptions {
   /** executing старше этого считается прерванным падением экземпляра (T16 для кластера). По умолчанию 15 мин. */
@@ -73,6 +74,26 @@ export async function retentionCleanup(
   return { expired, unknown };
 }
 
+/**
+ * Арендаторы, чьи данные пора удалить (§6.3): подписка остановлена дольше срока хранения (биллинг отметил
+ * deletion_requested_at) или приложение удалено с портала дольше срока хранения. Уже удалённые — пропускаются.
+ */
+export async function tenantsDueForDeletion(rt: SaasRuntime, now: number, limit = 100): Promise<string[]> {
+  const before = new Date(now - rt.billing.settings.dataRetentionDays * DAY).toISOString();
+  const rows = await rt.db.all<{ id: string }>(
+    `SELECT t.id FROM tenants t
+      WHERE t.status <> 'deleted'
+        AND ((t.status = 'uninstalled' AND t.uninstalled_at IS NOT NULL AND t.uninstalled_at <= ?)
+          OR EXISTS (SELECT 1 FROM subscriptions s
+                      WHERE s.tenant_id = t.id AND s.deletion_requested_at IS NOT NULL
+                        AND s.status IN ('suspended','canceled')))
+      ORDER BY t.id LIMIT ?`,
+    before,
+    limit,
+  );
+  return rows.map((r) => r.id);
+}
+
 export function createWorkerTasks(rt: SaasRuntime, o: WorkerTaskOptions = {}): WorkerTask[] {
   const now = o.now ?? Date.now;
   const log = rt.logger;
@@ -124,6 +145,22 @@ export function createWorkerTasks(rt: SaasRuntime, o: WorkerTaskOptions = {}): W
             await retentionCleanup(rt, t.id, o.staleExecutingMs ?? 15 * MIN, now());
           } catch (e) {
             log.warn({ tenantId: t.id, reason: reason(e) }, 'retention cleanup failed for tenant');
+          }
+        }
+      },
+    },
+    {
+      name: WORKER_TASK_NAMES.dataDeletion,
+      intervalMs: HOUR,
+      initialDelayMs: 5 * MIN,
+      async run(signal) {
+        const deletion = tenantDeletionFromRuntime(rt);
+        for (const tenantId of await tenantsDueForDeletion(rt, now())) {
+          if (signal.aborted) return;
+          try {
+            await deletion.deleteAll(tenantId, { actor: 'worker', reason: 'retention-expired' });
+          } catch (e) {
+            log.warn({ tenantId, reason: reason(e) }, 'tenant data deletion failed');
           }
         }
       },

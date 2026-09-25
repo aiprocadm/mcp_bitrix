@@ -169,7 +169,7 @@ describe('approvalUrl (§11.2)', () => {
     expect(!out.success && out.error.details.approvalUrl).toBe(`https://mcp.example.ru/app/approvals/${id}`);
     expect(!out.success && out.error.details.approvalCode).toBe(approvalShortCode(id));
     expect(!out.success && out.error.details.nextAction).not.toContain('npm run');
-    expect(approvalShortCode(id)).toMatch(/^[0-9A-F]{6}$/);
+    expect(approvalShortCode(id)).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
     expect(approvalUrl('https://x.ru', 'a/b')).toBe('https://x.ru/app/approvals/a%2Fb');
     const other: Envelope = fail(new AppError('NOT_FOUND', 'нет'), { requestId: 'r', durationMs: 1 });
     expect(withApprovalUrl(other, 'https://x.ru')).toBe(other);
