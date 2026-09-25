@@ -48,6 +48,8 @@ describe('MCP через InMemoryTransport (T41)', () => {
       'bitrix_server_version',
       'calendar_list',
       'calendar_list_events',
+      'chat_messages_get',
+      'chat_recent_list',
       'crm_activities_list',
       'crm_deal_products_get',
       'crm_fields_get',
