@@ -1,6 +1,10 @@
 /**
- * Сборка приложения из конфигурации: один экземпляр каждого сервиса на процесс.
- * Порядок: логгер → политики → ключ → БД → аудит → auth → лимитер → клиент → сервисы → инструменты.
+ * Сборка приложения из конфигурации (SaaS-ТЗ §5.1–5.3, §16).
+ *  - Platform — общее на процесс: конфигурация, логгер, политики, ключ, БД, аудит, файлы, панель, лимит входящих.
+ *  - TenantScope — всё, что зависит от портала: провайдер авторизации Bitrix24, лимитер и клиент портала,
+ *    capabilities, курсоры, операции, подтверждения, MutationExecutor, принципал, набор инструментов.
+ * В режиме single собирается ровно один TenantScope (арендатор `local`) — поведение как в базовом ТЗ.
+ * AppContainer = Platform + TenantScope единственного арендатора (совместимость со всем существующим кодом).
  */
 import { WebhookAuthProvider } from '../auth/webhook-provider.js';
 import type { BitrixAuthProvider } from '../auth/bitrix-auth-provider.js';
@@ -27,13 +31,30 @@ import { OperationsStore } from '../storage/operations.js';
 import { allTools } from '../tools/index.js';
 import type { ToolDefinition } from '../tools/types.js';
 
-export interface AppContainer {
+export const LOCAL_TENANT_ID = 'local';
+
+/** Общие сервисы процесса: не зависят от портала и арендатора. */
+export interface Platform {
   readonly config: AppConfig;
   readonly policies: Policies;
   readonly logger: AppLogger;
   readonly db: Database;
   readonly secretBox: SecretBox;
   readonly audit: AuditLog;
+  readonly files: FileStaging;
+  /** Учётные записи и сессии панели /admin. */
+  readonly admin: AdminAccounts;
+  readonly outputPolicy: OutputPolicyEngine;
+  /** Лимит входящих read-вызовов на оператора (ТЗ §8.6). */
+  readonly inboundLimiter: InboundLimiter;
+  /** Внешний fetch (в тестах — мок); используется клиентами Bitrix24 всех арендаторов. */
+  readonly fetch: FetchLike;
+  close(): void;
+}
+
+/** Контекст одного арендатора (портала): создаётся на арендатора, в single — один на процесс. */
+export interface TenantScope {
+  readonly tenantId: string;
   readonly auth: BitrixAuthProvider;
   readonly limiter: RateLimiter;
   readonly bitrix: BitrixClient;
@@ -42,15 +63,13 @@ export interface AppContainer {
   readonly operations: OperationsStore;
   readonly approvals: ApprovalService;
   readonly mutations: MutationExecutor;
-  readonly files: FileStaging;
-  /** Учётные записи и сессии панели /admin. */
-  readonly admin: AdminAccounts;
-  readonly outputPolicy: OutputPolicyEngine;
   readonly principal: Principal;
-  /** Лимит входящих read-вызовов на оператора (ТЗ §8.6). */
-  readonly inboundLimiter: InboundLimiter;
   readonly tools: readonly ToolDefinition[];
-  close(): void;
+}
+
+export interface AppContainer extends Platform, TenantScope {
+  readonly platform: Platform;
+  readonly scope: TenantScope;
 }
 
 export interface CreateAppOptions {
@@ -64,70 +83,18 @@ export interface CreateAppOptions {
   scanner?: FileScanner;
 }
 
-export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppContainer {
+/** Общие сервисы процесса. Не требует связи с Bitrix24. */
+export function createPlatform(config: AppConfig, opts: CreateAppOptions = {}): Platform {
   const logger = opts.logger ?? createLogger({ level: config.logging.level, name: config.server.name });
-
-  if (!config.bitrix.webhook) {
-    throw new AppError(
-      'CONFIG_INVALID',
-      'BITRIX_WEBHOOK_BASE_URL не задан: без связи с Bitrix24 сервер не запускается',
-      {
-        field: 'BITRIX_WEBHOOK_BASE_URL',
-        nextAction: 'Заполните .env по docs/bitrix-webhook.md и выполните npm run doctor',
-      },
-    );
-  }
-
   const policies = loadPolicies({
     methods: config.policy.methodPolicyFile,
     access: config.policy.accessPolicyFile,
     output: config.policy.outputPolicyFile,
   });
-  const principal = resolveLocalPrincipal(config.server.principalId, policies.access);
-
   const key = opts.masterKey ?? ensureMasterKey(config.storage.secretsKeyFile, { create: false }).key;
   const secretBox = new SecretBox(key);
-
   const db = Database.open(opts.inMemoryDatabase ? ':memory:' : config.storage.databasePath);
   const audit = new AuditLog(db, key, logger, config.logging.auditEnabled, config.logging.auditRetentionDays);
-
-  const auth = new WebhookAuthProvider(config.bitrix.webhook);
-  const limiter = new RateLimiter({
-    requestsPerSecond: config.bitrix.requestsPerSecond,
-    maxConcurrency: config.bitrix.maxConcurrency,
-    maxQueueSize: config.bitrix.maxQueueSize,
-  });
-  const bitrix = new BitrixClient({
-    auth,
-    fetch: opts.fetch ?? ((url, init) => globalThis.fetch(url, init)),
-    limiter,
-    logger,
-    allowedHosts: config.bitrix.allowedHosts,
-    timeoutMs: config.bitrix.timeoutMs,
-    uploadTimeoutMs: config.bitrix.uploadTimeoutMs,
-    maxUpstreamResponseBytes: config.bitrix.maxUpstreamResponseBytes,
-    maxReadRetries: config.bitrix.maxReadRetries,
-  });
-  const capabilities = new CapabilityService(db, bitrix);
-  const cursors = new CursorStore(db, secretBox, config.limits.cursorTtlSeconds);
-  const operations = new OperationsStore(db);
-  const recovered = operations.recoverAfterRestart();
-  if (recovered > 0) logger.warn({ recovered }, 'operations in executing state marked unknown after restart');
-  operations.expireStale();
-  cursors.cleanupExpired();
-  const outputPolicy = new OutputPolicyEngine(policies.output);
-  const approvals = new ApprovalService(
-    operations,
-    secretBox,
-    config.limits.approvalTtlSeconds,
-    policies.version,
-  );
-  const mutations = new MutationExecutor(operations, approvals, secretBox, audit, logger, {
-    idempotencyTtlHours: config.limits.idempotencyTtlHours,
-    policyVersion: policies.version,
-    confirmAllWrites: config.policy.confirmAllWrites,
-    maxPreparationsPerMinute: 10,
-  });
   const files = new FileStaging(
     db,
     {
@@ -144,9 +111,6 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
   files.cleanupExpired();
   const admin = new AdminAccounts(db, (id) => policies.access.principals[id]?.role);
   admin.cleanupExpired();
-
-  const tools = allTools().filter((t) => config.policy.enabledModules.has(t.module));
-
   return {
     config,
     policies,
@@ -154,7 +118,69 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
     db,
     secretBox,
     audit,
-    auth,
+    files,
+    admin,
+    outputPolicy: new OutputPolicyEngine(policies.output),
+    inboundLimiter: new InboundLimiter(config.server.inboundReadPerMinute),
+    fetch: opts.fetch ?? ((url, init) => globalThis.fetch(url, init)),
+    close() {
+      db.close();
+    },
+  };
+}
+
+export interface TenantSpec {
+  readonly tenantId: string;
+  readonly auth: BitrixAuthProvider;
+  readonly principal: Principal;
+  /**
+   * Разрешённые хосты Bitrix24 этого арендатора (защита от SSRF, Б§8.6). По умолчанию — из конфигурации (single).
+   * В SaaS у каждого арендатора свой портал: только его хост.
+   */
+  readonly allowedHosts?: readonly string[];
+}
+
+/** Контекст арендатора поверх общей платформы: свой клиент и лимитер портала, свои сервисы записи. */
+export function createTenantScope(platform: Platform, spec: TenantSpec): TenantScope {
+  const { config, db, secretBox, audit, logger, policies } = platform;
+  const limiter = new RateLimiter({
+    requestsPerSecond: config.bitrix.requestsPerSecond,
+    maxConcurrency: config.bitrix.maxConcurrency,
+    maxQueueSize: config.bitrix.maxQueueSize,
+  });
+  const bitrix = new BitrixClient({
+    auth: spec.auth,
+    fetch: platform.fetch,
+    limiter,
+    logger,
+    allowedHosts: spec.allowedHosts ?? config.bitrix.allowedHosts,
+    timeoutMs: config.bitrix.timeoutMs,
+    uploadTimeoutMs: config.bitrix.uploadTimeoutMs,
+    maxUpstreamResponseBytes: config.bitrix.maxUpstreamResponseBytes,
+    maxReadRetries: config.bitrix.maxReadRetries,
+  });
+  const capabilities = new CapabilityService(db, bitrix);
+  const cursors = new CursorStore(db, secretBox, config.limits.cursorTtlSeconds);
+  const operations = new OperationsStore(db);
+  const recovered = operations.recoverAfterRestart();
+  if (recovered > 0) logger.warn({ recovered }, 'operations in executing state marked unknown after restart');
+  operations.expireStale();
+  cursors.cleanupExpired();
+  const approvals = new ApprovalService(
+    operations,
+    secretBox,
+    config.limits.approvalTtlSeconds,
+    policies.version,
+  );
+  const mutations = new MutationExecutor(operations, approvals, secretBox, audit, logger, {
+    idempotencyTtlHours: config.limits.idempotencyTtlHours,
+    policyVersion: policies.version,
+    confirmAllWrites: config.policy.confirmAllWrites,
+    maxPreparationsPerMinute: 10,
+  });
+  return {
+    tenantId: spec.tenantId,
+    auth: spec.auth,
     limiter,
     bitrix,
     capabilities,
@@ -162,14 +188,41 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
     operations,
     approvals,
     mutations,
-    files,
-    admin,
-    outputPolicy,
-    principal,
-    inboundLimiter: new InboundLimiter(config.server.inboundReadPerMinute),
-    tools,
-    close() {
-      db.close();
-    },
+    principal: spec.principal,
+    tools: allTools().filter((t) => config.policy.enabledModules.has(t.module)),
   };
+}
+
+/** Режим single: платформа + единственный арендатор `local` с вебхуком из конфигурации. */
+export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppContainer {
+  if (config.deployment.mode !== 'single') {
+    throw new AppError(
+      'CONFIG_INVALID',
+      'DEPLOYMENT_MODE=saas ещё не собирается: компоненты SaaS появляются по этапам S1–S4 (docs/saas/STATUS.md)',
+      { field: 'DEPLOYMENT_MODE', nextAction: 'Для работы сейчас используйте DEPLOYMENT_MODE=single' },
+    );
+  }
+  if (!config.bitrix.webhook) {
+    throw new AppError(
+      'CONFIG_INVALID',
+      'BITRIX_WEBHOOK_BASE_URL не задан: без связи с Bitrix24 сервер не запускается',
+      {
+        field: 'BITRIX_WEBHOOK_BASE_URL',
+        nextAction: 'Заполните .env по docs/bitrix-webhook.md и выполните npm run doctor',
+      },
+    );
+  }
+  const platform = createPlatform(config, opts);
+  try {
+    const principal = resolveLocalPrincipal(config.server.principalId, platform.policies.access);
+    const scope = createTenantScope(platform, {
+      tenantId: LOCAL_TENANT_ID,
+      auth: new WebhookAuthProvider(config.bitrix.webhook),
+      principal,
+    });
+    return { ...platform, ...scope, platform, scope, close: () => platform.close() };
+  } catch (e) {
+    platform.close();
+    throw e;
+  }
 }

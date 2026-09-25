@@ -55,6 +55,11 @@ const csv = z
   );
 
 const RawEnvSchema = z.object({
+  // Режим развёртывания (SaaS-ТЗ D14, §5.3, §15): single — как базовое ТЗ; saas — много арендаторов.
+  DEPLOYMENT_MODE: z.enum(['single', 'saas']).default('single'),
+  PUBLIC_BASE_URL: optionalString,
+  REDIS_URL: optionalString,
+  PROCESS_ROLE: z.enum(['web', 'worker']).default('web'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   MCP_SERVER_NAME: z.string().trim().min(1).default('bitrix24-mcp-server'),
   MCP_TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
@@ -162,8 +167,20 @@ export interface WebhookCredentials {
   readonly secret: string;
 }
 
+export interface DeploymentSettings {
+  readonly mode: 'single' | 'saas';
+  /** saas: публичный адрес сервиса (issuer, ресурс MCP, redirect). */
+  readonly publicBaseUrl: string | undefined;
+  /** saas: адрес Redis (секрет зарегистрирован в редакторе). */
+  readonly redisUrl: string | undefined;
+  /** saas: адрес PostgreSQL (секрет зарегистрирован в редакторе); в single — не используется. */
+  readonly postgresUrl: string | undefined;
+  readonly processRole: 'web' | 'worker';
+}
+
 export interface AppConfig {
   readonly raw: RawEnv;
+  readonly deployment: DeploymentSettings;
   /** Каталог, от которого считаются относительные пути (каталог .env). */
   readonly baseDir: string;
   readonly configPath: string | undefined;
@@ -369,6 +386,66 @@ function optionalInt(name: string, value: string | undefined): number | undefine
   return Number(value);
 }
 
+const isPostgresUrl = (v: string) => /^postgres(ql)?:\/\//i.test(v);
+
+/** Адрес сервиса без учётных данных; пароль регистрируется в редакторе, чтобы не попасть в логи. */
+function parseSecretServiceUrl(field: string, value: string | undefined, schemes: readonly string[]): string {
+  if (!value) throw configError(field, 'обязателен при DEPLOYMENT_MODE=saas');
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configError(field, 'не является корректным URL');
+  }
+  if (!schemes.includes(url.protocol)) throw configError(field, `ожидается схема ${schemes.join(' или ')}`);
+  if (url.password) registerSecret(decodeURIComponent(url.password));
+  registerSecret(value);
+  return value;
+}
+
+/** SaaS-ТЗ §15: опасные сочетания режима блокируют старт (как базовый T01). */
+function parseDeployment(raw: RawEnv): DeploymentSettings {
+  if (raw.DEPLOYMENT_MODE === 'single') {
+    if (isPostgresUrl(raw.DATABASE_URL))
+      throw configError('DATABASE_URL', 'PostgreSQL поддерживается только при DEPLOYMENT_MODE=saas');
+    return {
+      mode: 'single',
+      publicBaseUrl: undefined,
+      redisUrl: undefined,
+      postgresUrl: undefined,
+      processRole: 'web',
+    };
+  }
+  const base = parseServiceUrl(
+    'PUBLIC_BASE_URL',
+    raw.PUBLIC_BASE_URL,
+    'обязателен при DEPLOYMENT_MODE=saas: публичный https-адрес сервиса, например https://mcp.example.ru',
+  );
+  if (base.pathname !== '/' || base.search)
+    throw configError('PUBLIC_BASE_URL', 'только origin без пути и query, например https://mcp.example.ru');
+  if (raw.BITRIX_WEBHOOK_BASE_URL)
+    throw configError(
+      'BITRIX_WEBHOOK_BASE_URL',
+      'в SaaS вебхуки не используются: порталы подключаются тиражным приложением (SaaS-ТЗ D2)',
+    );
+  if (raw.MCP_TRANSPORT !== 'http')
+    throw configError('MCP_TRANSPORT', 'SaaS работает только по HTTP (stdio — для DEPLOYMENT_MODE=single)');
+  if (!isPostgresUrl(raw.DATABASE_URL))
+    throw configError(
+      'DATABASE_URL',
+      'при DEPLOYMENT_MODE=saas требуется PostgreSQL (postgres://…), SQLite — только single',
+    );
+  const postgresUrl = parseSecretServiceUrl('DATABASE_URL', raw.DATABASE_URL, ['postgres:', 'postgresql:']);
+  const redisUrl = parseSecretServiceUrl('REDIS_URL', raw.REDIS_URL, ['redis:', 'rediss:']);
+  return {
+    mode: 'saas',
+    publicBaseUrl: base.origin,
+    redisUrl,
+    postgresUrl,
+    processRole: raw.PROCESS_ROLE,
+  };
+}
+
 export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   const processEnv = options.processEnv ?? process.env;
   const cwd = options.cwd ?? process.cwd();
@@ -497,6 +574,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     throw configError('ALLOW_REMOTE_FILE_URLS', 'загрузка по произвольным URL запрещена ТЗ §8.5');
   }
 
+  const deployment = parseDeployment(raw);
+
   const databasePath = raw.DATABASE_URL.startsWith('file:')
     ? resolve(raw.DATABASE_URL.slice('file:'.length))
     : resolve(raw.DATABASE_URL);
@@ -507,6 +586,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
 
   return {
     raw,
+    deployment,
     baseDir,
     configPath: existsSync(configPath) ? configPath : undefined,
     server: {
@@ -606,6 +686,10 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
   return {
     configPath:
       config.configPath ?? '(файл .env не найден, используются значения по умолчанию и переменные процесса)',
+    deploymentMode: config.deployment.mode,
+    ...(config.deployment.mode === 'saas'
+      ? { publicBaseUrl: config.deployment.publicBaseUrl, processRole: config.deployment.processRole }
+      : {}),
     transport: config.server.transport,
     host: config.server.host,
     port: config.server.port,
@@ -622,7 +706,8 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
     enableRawRest: config.policy.enableRawRest,
     rawRestMode: config.policy.rawRestMode,
     dataDir: config.storage.dataDir,
-    databasePath: config.storage.databasePath,
+    // В saas путь не печатается: DATABASE_URL — адрес PostgreSQL с паролем.
+    ...(config.deployment.mode === 'single' ? { databasePath: config.storage.databasePath } : {}),
   };
 }
 
