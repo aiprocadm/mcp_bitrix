@@ -60,6 +60,20 @@ const RawEnvSchema = z.object({
   PUBLIC_BASE_URL: optionalString,
   REDIS_URL: optionalString,
   PROCESS_ROLE: z.enum(['web', 'worker']).default('web'),
+  KEK_FILE: optionalString,
+  B24_APP_CLIENT_ID: optionalString,
+  B24_APP_CLIENT_SECRET_FILE: optionalString,
+  B24_OAUTH_SERVER_URL: optionalString,
+  OAUTH_SIGNING_KEYS_DIR: optionalString,
+  YOOKASSA_SHOP_ID: optionalString,
+  YOOKASSA_SECRET_KEY_FILE: optionalString,
+  YOOKASSA_API_URL: optionalString,
+  SELLER_NAME: optionalString,
+  SELLER_INN: optionalString,
+  SELLER_TAX_SYSTEM_CODE: optionalString,
+  SELLER_VAT_CODE: optionalString,
+  SMTP_URL: optionalString,
+  MAIL_FROM: optionalString,
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   MCP_SERVER_NAME: z.string().trim().min(1).default('bitrix24-mcp-server'),
   MCP_TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
@@ -176,6 +190,22 @@ export interface DeploymentSettings {
   /** saas: адрес PostgreSQL (секрет зарегистрирован в редакторе); в single — не используется. */
   readonly postgresUrl: string | undefined;
   readonly processRole: 'web' | 'worker';
+  /** Файлы секретов и публичные параметры saas (секреты читаются из файлов при сборке, не хранятся в конфиге). */
+  readonly files: {
+    readonly kek: string | undefined;
+    readonly b24ClientSecret: string | undefined;
+    readonly oauthSigningKeysDir: string | undefined;
+    readonly yookassaSecretKey: string | undefined;
+  };
+  readonly b24App: { readonly clientId: string | undefined; readonly oauthServerUrl: string | undefined };
+  readonly yookassa: { readonly shopId: string | undefined; readonly apiUrl: string | undefined };
+  readonly seller: {
+    readonly name: string | undefined;
+    readonly inn: string | undefined;
+    readonly taxSystemCode: string | undefined;
+    readonly vatCode: string | undefined;
+  };
+  readonly mail: { readonly smtpUrl: string | undefined; readonly from: string | undefined };
 }
 
 export interface AppConfig {
@@ -403,8 +433,21 @@ function parseSecretServiceUrl(field: string, value: string | undefined, schemes
   return value;
 }
 
+const EMPTY_SAAS = {
+  files: {
+    kek: undefined,
+    b24ClientSecret: undefined,
+    oauthSigningKeysDir: undefined,
+    yookassaSecretKey: undefined,
+  },
+  b24App: { clientId: undefined, oauthServerUrl: undefined },
+  yookassa: { shopId: undefined, apiUrl: undefined },
+  seller: { name: undefined, inn: undefined, taxSystemCode: undefined, vatCode: undefined },
+  mail: { smtpUrl: undefined, from: undefined },
+} as const;
+
 /** SaaS-ТЗ §15: опасные сочетания режима блокируют старт (как базовый T01). */
-function parseDeployment(raw: RawEnv): DeploymentSettings {
+function parseDeployment(raw: RawEnv, resolve: (p: string) => string): DeploymentSettings {
   if (raw.DEPLOYMENT_MODE === 'single') {
     if (isPostgresUrl(raw.DATABASE_URL))
       throw configError('DATABASE_URL', 'PostgreSQL поддерживается только при DEPLOYMENT_MODE=saas');
@@ -414,6 +457,7 @@ function parseDeployment(raw: RawEnv): DeploymentSettings {
       redisUrl: undefined,
       postgresUrl: undefined,
       processRole: 'web',
+      ...EMPTY_SAAS,
     };
   }
   const base = parseServiceUrl(
@@ -437,12 +481,47 @@ function parseDeployment(raw: RawEnv): DeploymentSettings {
     );
   const postgresUrl = parseSecretServiceUrl('DATABASE_URL', raw.DATABASE_URL, ['postgres:', 'postgresql:']);
   const redisUrl = parseSecretServiceUrl('REDIS_URL', raw.REDIS_URL, ['redis:', 'rediss:']);
+  const need = (field: string, v: string | undefined) => {
+    if (!v) throw configError(field, 'обязателен при DEPLOYMENT_MODE=saas');
+    return v;
+  };
+  if (raw.SELLER_INN && !/^(\d{10}|\d{12})$/.test(raw.SELLER_INN))
+    throw configError('SELLER_INN', 'ИНН — 10 или 12 цифр');
+  for (const [field, v] of [
+    ['B24_OAUTH_SERVER_URL', raw.B24_OAUTH_SERVER_URL],
+    ['YOOKASSA_API_URL', raw.YOOKASSA_API_URL],
+  ] as const) {
+    if (v) parseServiceUrl(field, v, 'https-адрес');
+  }
   return {
     mode: 'saas',
     publicBaseUrl: base.origin,
     redisUrl,
     postgresUrl,
     processRole: raw.PROCESS_ROLE,
+    files: {
+      kek: resolve(need('KEK_FILE', raw.KEK_FILE)),
+      b24ClientSecret: resolve(need('B24_APP_CLIENT_SECRET_FILE', raw.B24_APP_CLIENT_SECRET_FILE)),
+      oauthSigningKeysDir: resolve(need('OAUTH_SIGNING_KEYS_DIR', raw.OAUTH_SIGNING_KEYS_DIR)),
+      yookassaSecretKey: raw.YOOKASSA_SECRET_KEY_FILE ? resolve(raw.YOOKASSA_SECRET_KEY_FILE) : undefined,
+    },
+    b24App: {
+      clientId: need('B24_APP_CLIENT_ID', raw.B24_APP_CLIENT_ID),
+      oauthServerUrl: raw.B24_OAUTH_SERVER_URL,
+    },
+    yookassa: { shopId: raw.YOOKASSA_SHOP_ID, apiUrl: raw.YOOKASSA_API_URL },
+    seller: {
+      name: raw.SELLER_NAME,
+      inn: raw.SELLER_INN,
+      taxSystemCode: raw.SELLER_TAX_SYSTEM_CODE,
+      vatCode: raw.SELLER_VAT_CODE,
+    },
+    mail: {
+      smtpUrl: raw.SMTP_URL
+        ? parseSecretServiceUrl('SMTP_URL', raw.SMTP_URL, ['smtp:', 'smtps:'])
+        : undefined,
+      from: raw.MAIL_FROM,
+    },
   };
 }
 
@@ -574,7 +653,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     throw configError('ALLOW_REMOTE_FILE_URLS', 'загрузка по произвольным URL запрещена ТЗ §8.5');
   }
 
-  const deployment = parseDeployment(raw);
+  const deployment = parseDeployment(raw, resolve);
 
   const databasePath = raw.DATABASE_URL.startsWith('file:')
     ? resolve(raw.DATABASE_URL.slice('file:'.length))
