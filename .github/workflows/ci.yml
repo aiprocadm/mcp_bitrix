@@ -1,0 +1,35 @@
+# Обязательные проверки перед PR (CLAUDE.md п.6) на каждом push и pull request.
+# Только mock-профиль: секретов и доступа к порталу у CI нет и быть не должно.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run setup -- --config tests/fixtures/mock.env
+      - run: npm run lint
+      - run: npx prettier --check .
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:secrets
+      - run: npm run mcp:smoke -- --transport stdio --config tests/fixtures/mock.env
