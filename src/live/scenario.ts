@@ -1,7 +1,8 @@
 /**
  * Живой smoke-сценарий (ТЗ §10.3, §17.5, §19.1 «Live»): только явно включённый, только в согласованных
  * тестовых объектах, без автоматической очистки портала. Три режима:
- *  - read-only: connection info, profile через raw, capabilities MVP, 3–5 сделок, одна сделка, список задач;
+ *  - read-only: connection info, profile через raw, capabilities MVP, 3–5 сделок, одна сделка, список задач,
+ *    затем по одному безопасному чтению на каждый включённый модуль полной версии (без ID объектов);
  *  - prepare:   планы пяти записей с префиксом LIVE_TEST_PREFIX → operationId для подтверждения человеком;
  *  - execute:   те же аргументы с approvalId → объекты создаются один раз; повтор ключа → дубля нет.
  * Всё идёт через обычный диспетчер инструментов — тот же путь, что у MCP-клиента.
@@ -9,6 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AppContainer } from '../app/container.js';
 import type { AppConfig } from '../config/env.js';
+import type { ModuleName } from '../config/modules.js';
 import { AppError } from '../errors/app-error.js';
 import { dispatch } from '../mcp/register-tools.js';
 import type { Envelope } from '../mcp/result.js';
@@ -138,7 +140,7 @@ export async function runReadOnly(app: AppContainer): Promise<StepResult[]> {
     return env;
   };
 
-  push('1. bitrix_connection_info', await run(app, 'bitrix_connection_info', {}), (d) => {
+  const me = push('1. bitrix_connection_info', await run(app, 'bitrix_connection_info', {}), (d) => {
     const u = d['bitrixUser'] as { id: number; name: string; lastName: string };
     return `портал ${String(d['portalOrigin'])}, пользователь #${u.id} ${u.name} ${u.lastName}, scope: ${(d['scopes'] as string[]).join(',') || '—'}`;
   });
@@ -183,7 +185,76 @@ export async function runReadOnly(app: AppContainer): Promise<StepResult[]> {
     await run(app, 'task_list', { pageSize: 5 }),
     (d) => `получено ${String(d['returnedCount'])}, всего ${asText(d['upstreamTotal']) || '?'}`,
   );
+  const userId = Number(me.success ? (me.data as { bitrixUser?: { id?: number } }).bitrixUser?.id : 0) || 0;
+  steps.push(...(await runModuleReads(app, userId)));
   return steps;
+}
+
+/**
+ * Одно безопасное чтение на модуль полной версии (ТЗ §11: «read-only smoke» каждого модуля).
+ * Не требует ID объектов портала. Отсутствие scope/модуля/тарифа — `blocked` (среда), иное — `failed`.
+ */
+export function moduleReadChecks(
+  userId: number,
+  now = new Date(),
+): { module: ModuleName; tool: string; args: Record<string, unknown> }[] {
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const checks: { module: ModuleName; tool: string; args: Record<string, unknown> }[] = [
+    { module: 'crm', tool: 'crm_stages_and_statuses', args: { entityType: 'deal' } },
+    { module: 'crm', tool: 'crm_list_records', args: { entityType: 'lead', pageSize: 3 } },
+    { module: 'smartProcesses', tool: 'smart_process_types_list', args: { pageSize: 5 } },
+    { module: 'invoices', tool: 'invoice_stages_list', args: {} },
+    { module: 'invoices', tool: 'invoice_list', args: { pageSize: 3 } },
+    { module: 'company', tool: 'company_departments_list', args: { pageSize: 5 } },
+    { module: 'chat', tool: 'chat_recent_list', args: { pageSize: 5 } },
+    {
+      module: 'telephony',
+      tool: 'telephony_calls_list',
+      args: { from: weekAgo, to: now.toISOString(), pageSize: 5 },
+    },
+    { module: 'disk', tool: 'disk_storages_list', args: { pageSize: 5 } },
+    { module: 'groups', tool: 'workgroups_list', args: { pageSize: 5 } },
+    { module: 'catalog', tool: 'catalog_list', args: { pageSize: 5 } },
+    { module: 'catalog', tool: 'warehouse_list', args: { pageSize: 5 } },
+    { module: 'orders', tool: 'store_orders_list', args: { pageSize: 3 } },
+    { module: 'feed', tool: 'feed_posts_list', args: { pageSize: 3 } },
+    { module: 'knowledgeBase', tool: 'kb_legacy_bases_list', args: { scope: 'KNOWLEDGE', pageSize: 5 } },
+    { module: 'knowledgeBase', tool: 'kb2_bases_list', args: { pageSize: 5 } },
+  ];
+  if (userId > 0)
+    checks.push({ module: 'calendar', tool: 'calendar_list', args: { type: 'user', ownerId: userId } });
+  return checks;
+}
+
+/** Коды, означающие ограничение среды (права, scope, модуль, тариф), а не дефект сервера. */
+const ENVIRONMENT_CODES = new Set([
+  'BITRIX_SCOPE_MISSING',
+  'BITRIX_ACCESS_DENIED',
+  'FEATURE_UNAVAILABLE',
+  'BITRIX_APP_CONTEXT_REQUIRED',
+]);
+
+async function runModuleReads(app: AppContainer, userId: number): Promise<StepResult[]> {
+  const out: StepResult[] = [];
+  let n = 0;
+  for (const c of moduleReadChecks(userId)) {
+    if (!app.config.policy.enabledModules.has(c.module)) continue;
+    n += 1;
+    const step = `7.${String(n)} ${c.tool} (модуль ${c.module})`;
+    const env = await run(app, c.tool, c.args);
+    if (env.success) {
+      const d = env.data as Record<string, unknown>;
+      const count = Array.isArray(d['items']) ? `${String(d['items'].length)} записей` : 'ответ получен';
+      out.push({ step, status: 'passed', detail: `${count}; полнота: ${env.meta.completeness}` });
+    } else {
+      out.push({
+        step,
+        status: ENVIRONMENT_CODES.has(env.error.code) ? 'blocked' : 'failed',
+        detail: `${env.error.code}: ${env.error.message}`,
+      });
+    }
+  }
+  return out;
 }
 
 /** Пять записей §10.3 п.5 в согласованных областях, все с префиксом. */
