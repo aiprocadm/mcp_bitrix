@@ -143,7 +143,7 @@ async function approveAndRun(tool: string, args: Record<string, unknown>) {
   const prep = await call(tool, args);
   expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
   const operationId = prep.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(tool, { ...args, approvalId: operationId });
   return { prep, done, operationId };
 }
@@ -208,7 +208,7 @@ describe('feed_post_create', () => {
     });
     expect(bad.isError).toBe(true);
     expect(t.bitrix.callsTo('log.blogpost.add')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('очистка script до плана; APPROVAL_REQUIRED → approve → одна публикация с заданной аудиторией → replay', async () => {
@@ -267,7 +267,7 @@ describe('feed_post_update', () => {
       idempotencyKey: randomUUID(),
     });
     expect(conflict.error?.code).toBe('CONFLICT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const list = await call('feed_posts_list', { pageSize: 5 });
     const item = (list.data?.['items'] as Record<string, unknown>[]).find((p) => p['postId'] === 2);
@@ -309,7 +309,7 @@ describe('feed_post_update', () => {
       idempotencyKey: randomUUID(),
     });
     expect(missing.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 });
 

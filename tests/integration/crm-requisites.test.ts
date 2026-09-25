@@ -317,7 +317,7 @@ async function approveAndRun(tool: string, args: Record<string, unknown>) {
   const prep = await call(tool, args);
   expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
   const operationId = prep.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(tool, { ...args, approvalId: operationId });
   const again = await call(tool, { ...args, approvalId: operationId });
   return { prep, done, again, operationId };
@@ -427,7 +427,7 @@ describe('crm_requisite_create', () => {
     const env = await call('crm_requisite_create', { ...base, presetId: 99, idempotencyKey: randomUUID() });
     expect(env.error?.code).toBe('VALIDATION_ERROR');
     expect(env.error?.details['reason']).toBe('INVALID_PRESET');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('crm.company.get')).toHaveLength(0);
     expect(t.bitrix.callsTo('crm.requisite.add')).toHaveLength(0);
   });
@@ -489,7 +489,7 @@ describe('crm_requisite_create', () => {
     const args = { ...base, idempotencyKey: randomUUID() };
     const prep = await call('crm_requisite_create', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_requisite_create', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     const again = await call('crm_requisite_create', { ...args, approvalId: operationId });
@@ -542,7 +542,7 @@ describe('crm_requisite_update', () => {
       idempotencyKey: randomUUID(),
     });
     expect(stale.error?.code).toBe('CONFLICT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const dry = await call('crm_requisite_update', {
       requisiteId: 27,
@@ -557,7 +557,7 @@ describe('crm_requisite_update', () => {
     };
     const prep = await call('crm_requisite_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     requisites[27] = { ...requisite(27), RQ_DIRECTOR: 'Петров П. П.' }; // чужое изменение
     const raced = await call('crm_requisite_update', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -572,7 +572,7 @@ describe('crm_requisite_update', () => {
     });
     expect(env.success).toBe(false);
     expect(env.error?.code).not.toBe('APPROVAL_REQUIRED');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 });
 
@@ -587,7 +587,7 @@ describe('crm_requisite_address_set', () => {
     expect(env.error?.code).toBe('VALIDATION_ERROR');
     expect(env.error?.details['reason']).toBe('INVALID_ADDRESS_TYPE');
     expect(env.error?.message).toContain('6 (Юридический адрес)');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('crm.requisite.get')).toHaveLength(0);
   });
 
@@ -659,7 +659,7 @@ describe('crm_requisite_address_set', () => {
     };
     const prep = await call('crm_requisite_address_set', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     addresses.push({ TYPE_ID: '6', ENTITY_TYPE_ID: '8', ENTITY_ID: '27', CITY: 'Тверь' });
     const raced = await call('crm_requisite_address_set', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -695,7 +695,7 @@ describe('crm_bank_account_add', () => {
       dryRun: true,
     });
     expect(unknown.error?.details['reason']).toBe('UNKNOWN_FIELD');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('полный путь: COUNTRY_ID из шаблона, одна запись, сверка через bankdetail.get, replay', async () => {
@@ -734,7 +734,7 @@ describe('crm_activity_create', () => {
       expect(env.error?.details['reason']).toBe('UNSUPPORTED_PROVIDER');
     }
     expect(t.bitrix.callsTo('crm.deal.get')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('проверки провайдера: todo требует deadline и не принимает communications; звонок — ровно один телефон', async () => {

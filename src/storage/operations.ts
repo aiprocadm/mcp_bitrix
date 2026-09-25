@@ -2,8 +2,10 @@
  * Ledger операций записи (ТЗ §4.4): prepared → approved → executing → succeeded/failed/unknown,
  * плюс denied/expired. Переходы атомарны (UPDATE ... WHERE status = ожидаемый).
  * Полные объекты CRM здесь не хранятся: план и минимальный результат — зашифрованы.
+ * Хранилище привязано к арендатору (SaaS-ТЗ §6.2): каждый запрос фильтрует tenant_id,
+ * операция чужого арендатора выглядит как отсутствующая.
  */
-import type { Database } from './database.js';
+import { toNumber, type SqlDb, type SqlExecutor } from './sql.js';
 
 export type OperationStatus =
   'prepared' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'unknown' | 'denied' | 'expired';
@@ -77,188 +79,261 @@ export interface IdempotencyRow {
 const now = () => new Date().toISOString();
 
 export class OperationsStore {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: SqlDb,
+    readonly tenantId: string,
+  ) {}
+
+  private q<T>(fn: (x: SqlExecutor) => Promise<T>): Promise<T> {
+    return this.db.withTenant(this.tenantId, fn);
+  }
 
   /** После сбоя процесса: всё, что было executing, становится unknown (ТЗ §4.4, T16). */
-  recoverAfterRestart(): number {
-    const r = this.db.run(
-      "UPDATE operations SET status = 'unknown', finished_at = ? WHERE status = 'executing'",
-      now(),
+  async recoverAfterRestart(): Promise<number> {
+    return this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = 'unknown', finished_at = ? WHERE tenant_id = ? AND status = 'executing'",
+        now(),
+        this.tenantId,
+      ),
     );
-    return Number(r.changes);
   }
 
-  expireStale(): number {
-    const r = this.db.run(
-      "UPDATE operations SET status = 'expired' WHERE status IN ('prepared','approved') AND expires_at < ?",
-      now(),
-    );
-    this.db.run('DELETE FROM idempotency WHERE expires_at < ?', now());
-    return Number(r.changes);
+  async expireStale(): Promise<number> {
+    return this.q(async (x) => {
+      const n = await x.run(
+        "UPDATE operations SET status = 'expired' WHERE tenant_id = ? AND status IN ('prepared','approved') AND expires_at < ?",
+        this.tenantId,
+        now(),
+      );
+      await x.run('DELETE FROM idempotency WHERE tenant_id = ? AND expires_at < ?', this.tenantId, now());
+      return n;
+    });
   }
 
-  get(operationId: string): OperationRow | undefined {
-    return this.db.get<OperationRow>('SELECT * FROM operations WHERE id = ?', operationId);
+  get(operationId: string): Promise<OperationRow | undefined> {
+    return this.q((x) =>
+      x.get<OperationRow>(
+        'SELECT * FROM operations WHERE tenant_id = ? AND id = ?',
+        this.tenantId,
+        operationId,
+      ),
+    ).then((r) => (r ? normalize(r) : undefined));
   }
 
   /** Только своя операция; чужая выглядит как отсутствующая (не раскрываем существование). */
-  getOwn(operationId: string, principalId: string, portalKey: string): OperationRow | undefined {
-    const row = this.get(operationId);
+  async getOwn(
+    operationId: string,
+    principalId: string,
+    portalKey: string,
+  ): Promise<OperationRow | undefined> {
+    const row = await this.get(operationId);
     if (row?.principal_id !== principalId || row.portal_key !== portalKey) return undefined;
     return row;
   }
 
-  view(operationId: string, principalId: string, portalKey: string): OperationView | undefined {
-    const row = this.getOwn(operationId, principalId, portalKey);
-    if (!row) return undefined;
-    return toView(row);
+  async view(
+    operationId: string,
+    principalId: string,
+    portalKey: string,
+  ): Promise<OperationView | undefined> {
+    const row = await this.getOwn(operationId, principalId, portalKey);
+    return row ? toView(row) : undefined;
   }
 
-  listPending(principalId: string, portalKey: string): OperationView[] {
-    return this.db
-      .all<OperationRow>(
-        "SELECT * FROM operations WHERE principal_id = ? AND portal_key = ? AND status IN ('prepared','approved') AND expires_at >= ? ORDER BY created_at",
+  async listPending(principalId: string, portalKey: string): Promise<OperationView[]> {
+    const rows = await this.q((x) =>
+      x.all<OperationRow>(
+        "SELECT * FROM operations WHERE tenant_id = ? AND principal_id = ? AND portal_key = ? AND status IN ('prepared','approved') AND expires_at >= ? ORDER BY created_at",
+        this.tenantId,
         principalId,
         portalKey,
         now(),
-      )
-      .map(toView);
+      ),
+    );
+    return rows.map(normalize).map(toView);
   }
 
-  /** Все ожидающие решения операции портала — для панели владельца (любой principal). */
-  listPendingAll(portalKey: string): (OperationView & { principalId: string })[] {
-    return this.db
-      .all<OperationRow>(
-        "SELECT * FROM operations WHERE portal_key = ? AND status IN ('prepared','approved') AND expires_at >= ? ORDER BY created_at",
+  /** Все ожидающие решения операции портала — для панели владельца (любой principal арендатора). */
+  async listPendingAll(portalKey: string): Promise<(OperationView & { principalId: string })[]> {
+    const rows = await this.q((x) =>
+      x.all<OperationRow>(
+        "SELECT * FROM operations WHERE tenant_id = ? AND portal_key = ? AND status IN ('prepared','approved') AND expires_at >= ? ORDER BY created_at",
+        this.tenantId,
         portalKey,
         now(),
-      )
-      .map((r) => ({ ...toView(r), principalId: r.principal_id }));
+      ),
+    );
+    return rows.map(normalize).map((r) => ({ ...toView(r), principalId: r.principal_id }));
   }
 
   /** Строка операции по id в пределах портала (панель): без привязки к principal. */
-  getForPortal(operationId: string, portalKey: string): OperationRow | undefined {
-    const row = this.get(operationId);
+  async getForPortal(operationId: string, portalKey: string): Promise<OperationRow | undefined> {
+    const row = await this.get(operationId);
     return row?.portal_key === portalKey ? row : undefined;
   }
 
-  createPrepared(op: NewOperation): void {
-    this.db.run(
-      `INSERT INTO operations (id, principal_id, portal_key, tool, operation_kind, status, canonical_args_hash, target,
-         expected_state_hash, file_hash, policy_version, plan_encrypted, idempotency_key, attempts, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      op.id,
-      op.principalId,
-      op.portalKey,
-      op.tool,
-      op.operationKind,
-      op.argsHash,
-      op.target,
-      op.expectedStateHash,
-      op.fileHash,
-      op.policyVersion,
-      op.planEncrypted,
-      op.idempotencyKey,
-      now(),
-      op.expiresAt,
+  async createPrepared(op: NewOperation): Promise<void> {
+    await this.q((x) =>
+      x.run(
+        `INSERT INTO operations (id, tenant_id, principal_id, portal_key, tool, operation_kind, status, canonical_args_hash, target,
+           expected_state_hash, file_hash, policy_version, plan_encrypted, idempotency_key, attempts, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        op.id,
+        this.tenantId,
+        op.principalId,
+        op.portalKey,
+        op.tool,
+        op.operationKind,
+        op.argsHash,
+        op.target,
+        op.expectedStateHash,
+        op.fileHash,
+        op.policyVersion,
+        op.planEncrypted,
+        op.idempotencyKey,
+        now(),
+        op.expiresAt,
+      ),
     );
   }
 
-  findIdempotency(
+  async findIdempotency(
     principalId: string,
     portalKey: string,
     tool: string,
     key: string,
-  ): IdempotencyRow | undefined {
-    const row = this.db.get<IdempotencyRow>(
-      'SELECT * FROM idempotency WHERE principal_id = ? AND portal_key = ? AND tool = ? AND idempotency_key = ?',
-      principalId,
-      portalKey,
-      tool,
-      key,
+  ): Promise<IdempotencyRow | undefined> {
+    const row = await this.q((x) =>
+      x.get<IdempotencyRow>(
+        'SELECT * FROM idempotency WHERE tenant_id = ? AND principal_id = ? AND portal_key = ? AND tool = ? AND idempotency_key = ?',
+        this.tenantId,
+        principalId,
+        portalKey,
+        tool,
+        key,
+      ),
     );
     if (row && Date.parse(row.expires_at) < Date.now()) return undefined;
     return row;
   }
 
-  upsertIdempotency(row: Omit<IdempotencyRow, 'created_at'>): void {
-    this.db.run(
-      `INSERT INTO idempotency (principal_id, portal_key, tool, idempotency_key, args_hash, operation_id, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(principal_id, portal_key, tool, idempotency_key)
-       DO UPDATE SET args_hash = excluded.args_hash, operation_id = excluded.operation_id, expires_at = excluded.expires_at`,
-      row.principal_id,
-      row.portal_key,
-      row.tool,
-      row.idempotency_key,
-      row.args_hash,
-      row.operation_id,
-      now(),
-      row.expires_at,
+  async upsertIdempotency(row: Omit<IdempotencyRow, 'created_at'>): Promise<void> {
+    await this.q((x) =>
+      x.run(
+        `INSERT INTO idempotency (tenant_id, principal_id, portal_key, tool, idempotency_key, args_hash, operation_id, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, principal_id, portal_key, tool, idempotency_key)
+         DO UPDATE SET args_hash = excluded.args_hash, operation_id = excluded.operation_id, expires_at = excluded.expires_at`,
+        this.tenantId,
+        row.principal_id,
+        row.portal_key,
+        row.tool,
+        row.idempotency_key,
+        row.args_hash,
+        row.operation_id,
+        now(),
+        row.expires_at,
+      ),
     );
   }
 
   /** Человек подтвердил: prepared → approved, только если срок не истёк. */
-  approve(operationId: string): 'approved' | 'expired' | 'not-prepared' {
-    const row = this.get(operationId);
+  async approve(operationId: string): Promise<'approved' | 'expired' | 'not-prepared'> {
+    const row = await this.get(operationId);
     if (row?.status !== 'prepared') return 'not-prepared';
     if (Date.parse(row.expires_at) < Date.now()) {
-      this.db.run(
-        "UPDATE operations SET status = 'expired' WHERE id = ? AND status = 'prepared'",
-        operationId,
+      await this.q((x) =>
+        x.run(
+          "UPDATE operations SET status = 'expired' WHERE tenant_id = ? AND id = ? AND status = 'prepared'",
+          this.tenantId,
+          operationId,
+        ),
       );
       return 'expired';
     }
-    const r = this.db.run(
-      "UPDATE operations SET status = 'approved', approved_at = ? WHERE id = ? AND status = 'prepared'",
-      now(),
-      operationId,
+    const n = await this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = 'approved', approved_at = ? WHERE tenant_id = ? AND id = ? AND status = 'prepared'",
+        now(),
+        this.tenantId,
+        operationId,
+      ),
     );
-    return Number(r.changes) === 1 ? 'approved' : 'not-prepared';
+    return n === 1 ? 'approved' : 'not-prepared';
   }
 
-  deny(operationId: string): boolean {
-    const r = this.db.run(
-      "UPDATE operations SET status = 'denied', finished_at = ? WHERE id = ? AND status IN ('prepared','approved')",
-      now(),
-      operationId,
+  async deny(operationId: string): Promise<boolean> {
+    const n = await this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = 'denied', finished_at = ? WHERE tenant_id = ? AND id = ? AND status IN ('prepared','approved')",
+        now(),
+        this.tenantId,
+        operationId,
+      ),
     );
-    return Number(r.changes) === 1;
+    return n === 1;
+  }
+
+  /** Отзыв доступа пользователя (SaaS-ТЗ §7.4): его неисполненные подтверждения аннулируются. */
+  async denyAllPending(principalId: string): Promise<number> {
+    return this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = 'denied', finished_at = ? WHERE tenant_id = ? AND principal_id = ? AND status IN ('prepared','approved')",
+        now(),
+        this.tenantId,
+        principalId,
+      ),
+    );
   }
 
   /** Атомарное расходование подтверждения: approved → executing. Второй вызов не пройдёт. */
-  tryStartExecuting(operationId: string): boolean {
-    const r = this.db.run(
-      "UPDATE operations SET status = 'executing', executing_at = ?, attempts = attempts + 1 WHERE id = ? AND status = 'approved' AND expires_at >= ?",
-      now(),
-      operationId,
-      now(),
+  async tryStartExecuting(operationId: string): Promise<boolean> {
+    const n = await this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = 'executing', executing_at = ?, attempts = attempts + 1 WHERE tenant_id = ? AND id = ? AND status = 'approved' AND expires_at >= ?",
+        now(),
+        this.tenantId,
+        operationId,
+        now(),
+      ),
     );
-    return Number(r.changes) === 1;
+    return n === 1;
   }
 
-  finish(
+  async finish(
     operationId: string,
     status: 'succeeded' | 'failed' | 'unknown',
     data: { resultEncrypted?: string; errorCode?: string; errorMessage?: string },
-  ): void {
-    this.db.run(
-      "UPDATE operations SET status = ?, finished_at = ?, result_encrypted = ?, error_code = ?, error_message = ? WHERE id = ? AND status = 'executing'",
-      status,
-      now(),
-      data.resultEncrypted ?? null,
-      data.errorCode ?? null,
-      data.errorMessage ?? null,
-      operationId,
+  ): Promise<void> {
+    await this.q((x) =>
+      x.run(
+        "UPDATE operations SET status = ?, finished_at = ?, result_encrypted = ?, error_code = ?, error_message = ? WHERE tenant_id = ? AND id = ? AND status = 'executing'",
+        status,
+        now(),
+        data.resultEncrypted ?? null,
+        data.errorCode ?? null,
+        data.errorMessage ?? null,
+        this.tenantId,
+        operationId,
+      ),
     );
   }
 
-  countByStatus(): Record<string, number> {
-    const rows = this.db.all<{ status: string; n: number }>(
-      'SELECT status, COUNT(*) AS n FROM operations GROUP BY status',
+  async countByStatus(): Promise<Record<string, number>> {
+    const rows = await this.q((x) =>
+      x.all<{ status: string; n: unknown }>(
+        'SELECT status, COUNT(*) AS n FROM operations WHERE tenant_id = ? GROUP BY status',
+        this.tenantId,
+      ),
     );
-    return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+    return Object.fromEntries(rows.map((r) => [r.status, toNumber(r.n)]));
   }
+}
+
+/** PostgreSQL отдаёт BIGINT строкой: приводим числовые поля. */
+function normalize(row: OperationRow): OperationRow {
+  return { ...row, attempts: toNumber(row.attempts) };
 }
 
 function toView(row: OperationRow): OperationView {

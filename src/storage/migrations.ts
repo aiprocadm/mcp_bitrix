@@ -139,4 +139,21 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
 `,
   },
+  {
+    id: 3,
+    name: 'tenant-id',
+    // SaaS-ТЗ §6.2, S1: каждая строка арендатора помечена tenant_id; существующие данные — арендатор `local`.
+    sql: `
+ALTER TABLE operations ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE idempotency ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE cursors ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE audit ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE file_manifests ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+CREATE INDEX IF NOT EXISTS idx_operations_tenant_principal ON operations(tenant_id, principal_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_idempotency_tenant ON idempotency(tenant_id, principal_id, portal_key, tool, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_cursors_tenant ON cursors(tenant_id, id);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_ts ON audit(tenant_id, ts);
+CREATE INDEX IF NOT EXISTS idx_file_manifests_tenant ON file_manifests(tenant_id, token);
+`,
+  },
 ];

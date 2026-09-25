@@ -3,12 +3,13 @@ import { bindingHash, CursorStore, paginateLegacy } from '../../src/bitrix/pagin
 import { AppError } from '../../src/errors/app-error.js';
 import { SecretBox } from '../../src/security/crypto.js';
 import { Database } from '../../src/storage/database.js';
+import { SqliteSqlDb } from '../../src/storage/sqlite-db.js';
 import type { JsonValue } from '../../src/bitrix/legacy-adapter.js';
 import { deals, type MockResponse, legacyListPage } from '../helpers/mock-bitrix.js';
 
 function setup(ttl = 600) {
   const db = Database.open(':memory:');
-  const store = new CursorStore(db, new SecretBox(Buffer.alloc(32, 3)), ttl);
+  const store = new CursorStore(new SqliteSqlDb(db), new SecretBox(Buffer.alloc(32, 3)), ttl, 'local');
   const all = deals(1, 50);
   const upstreamCalls: number[] = [];
   const fetchPage = (start: number) => {

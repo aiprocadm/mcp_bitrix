@@ -75,6 +75,7 @@ export async function dispatch(
   const startedAt = Date.now();
   const ctx: ToolContext = {
     requestId,
+    tenant: { id: app.tenantId },
     principal,
     config: app.config,
     policies: app.policies,
@@ -112,7 +113,8 @@ export async function dispatch(
       ctx.logger.error({ reason: err.details.reason }, 'tool handler failed');
     envelope = fail(err, { requestId, durationMs: Date.now() - startedAt });
   }
-  app.audit.record({
+  await app.audit.record({
+    tenantId: app.tenantId,
     requestId,
     principalId: principal.id,
     portalKey: app.auth.portalKey,

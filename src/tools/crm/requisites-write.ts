@@ -416,8 +416,8 @@ async function readAddress(ctx: ToolContext, requisiteId: number, typeId: number
 
 const addressHash = (s: AddressState) => stateHash(s.exists ? s.text : { exists: false });
 
-function plannedModeOf(ctx: ToolContext, approvalId: string): 'create' | 'update' | undefined {
-  const row = ctx.operations.getOwn(approvalId, ctx.principal.id, ctx.bitrix.auth.portalKey);
+async function plannedModeOf(ctx: ToolContext, approvalId: string): Promise<'create' | 'update' | undefined> {
+  const row = await ctx.operations.getOwn(approvalId, ctx.principal.id, ctx.bitrix.auth.portalKey);
   const m = /:(create|update)$/.exec(row?.target ?? '');
   return m?.[1] === 'create' || m?.[1] === 'update' ? m[1] : undefined;
 }
@@ -511,7 +511,7 @@ export const crmRequisiteAddressSetTool = defineTool({
     }
     const method = mode === 'create' ? 'crm.address.add' : 'crm.address.update';
     // Режим, показанный человеку в подтверждённом плане, хранится в target операции.
-    const plannedMode = args.approvalId ? plannedModeOf(ctx, args.approvalId) : mode;
+    const plannedMode = args.approvalId ? await plannedModeOf(ctx, args.approvalId) : mode;
     const risks = [REQUISITE_RISK];
     const cleared = Object.entries(changes).filter(([, c]) => c.to === '' && c.from !== '');
     if (cleared.length > 0) risks.push(`Будут очищены поля: ${cleared.map(([k]) => k).join(', ')}`);

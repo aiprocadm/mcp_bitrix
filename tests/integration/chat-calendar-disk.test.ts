@@ -33,7 +33,7 @@ async function approved(
 ): Promise<{ prep: Env; done: Env; operationId: string }> {
   const prep = await call(name, args);
   const operationId = opId(prep);
-  if (operationId) t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  if (operationId) await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = operationId ? await call(name, { ...args, approvalId: operationId }) : prep;
   return { prep, done, operationId };
 }
@@ -150,7 +150,7 @@ describe('chat_send_message', () => {
     });
     expect(env.error?.code).toBe('VALIDATION_ERROR');
     expect(t.bitrix.callsTo('im.message.add')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('план содержит точный dialogId, название чата, участников и ПОЛНЫЙ текст; сообщение уходит один раз и читается обратно', async () => {
@@ -216,7 +216,7 @@ describe('calendar_create_event', () => {
     const missing = await call('calendar_create_event', { ...base, sectionId: 99, from: FROM, to: TO });
     expect(missing.error?.code).toBe('NOT_FOUND');
     expect(t.bitrix.callsTo('calendar.event.add')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('встреча с участниками: план с календарём, датами в зоне и участниками; from_ts/to_ts в запросе; сверка дат из формата Bitrix', async () => {
@@ -335,7 +335,7 @@ describe('disk_upload_file', () => {
     });
     expect(unsafe.error?.code).toBe('UNSAFE_FILE');
     expect(t.bitrix.callsTo('disk.folder.uploadfile')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('inline: план с папкой, именем, размером и sha256; загрузка один раз; размер сверен; DOWNLOAD_URL не выдаётся', async () => {
@@ -395,11 +395,11 @@ describe('disk_upload_file', () => {
     const prep = await call('disk_upload_file', args);
     const operationId = opId(prep);
     writeFileSync(manifest.stagingPath, 'подменённое\n');
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('disk_upload_file', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('UNSAFE_FILE');
     expect(t.bitrix.callsTo('disk.folder.uploadfile')).toHaveLength(0);
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('failed');
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe('failed');
   });
 
   it('файл появился в папке между планом и подтверждением → CONFLICT (precheck)', async () => {
@@ -407,7 +407,7 @@ describe('disk_upload_file', () => {
     const prep = await call('disk_upload_file', args);
     const operationId = opId(prep);
     folderChildren.push({ ID: '901', NAME: 'новый.txt', TYPE: 'file' });
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('disk_upload_file', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('CONFLICT');
     expect(t.bitrix.callsTo('disk.folder.uploadfile')).toHaveLength(0);

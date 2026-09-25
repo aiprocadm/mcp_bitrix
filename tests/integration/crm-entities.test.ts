@@ -275,7 +275,7 @@ describe('запись: create для лида/контакта/компании
     });
     expect(badStage.error?.code).toBe('VALIDATION_ERROR');
     expect(badStage.error?.details['reason']).toBe('INVALID_STAGE');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     store['contact'] = {
       ...store['contact'],
@@ -297,7 +297,7 @@ describe('запись: create для лида/контакта/компании
       'crm_search_records',
     );
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_create_record', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({
       entityType: 'contact',
@@ -362,7 +362,7 @@ describe('запись: create для лида/контакта/компании
     const prep = await call('crm_update_record', args);
     expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_update_record', { ...args, approvalId: operationId });
     expect(done.success).toBe(true);
     expect(done.data).toMatchObject({
@@ -396,7 +396,7 @@ describe('запись: create для лида/контакта/компании
     };
     const prep = await call('crm_update_record', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     row('company', 20)['INDUSTRY'] = 'OTHER';
     const done = await call('crm_update_record', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('CONFLICT');
@@ -417,7 +417,7 @@ describe('запись: create для лида/контакта/компании
     const args = { entityType: 'lead', id: 1, fields: { TITLE: 'x' }, idempotencyKey: randomUUID() };
     const prep = await call('crm_update_record', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_update_record', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
   });

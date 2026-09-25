@@ -171,7 +171,7 @@ describe('task_create', () => {
         const r = await client.callTool({ name: 'task_create', arguments: args });
         expect(r.isError, JSON.stringify(args)).toBe(true);
       }
-      expect(t.app.operations.countByStatus()).toEqual({});
+      expect(await t.app.operations.countByStatus()).toEqual({});
       const noZone = await call('task_create', cases[0] ?? {});
       expect(noZone.error?.details['reason']).toBe('TIMEZONE_REQUIRED');
     });
@@ -201,7 +201,7 @@ describe('task_create', () => {
         },
       });
       expect((env.data?.['plan'] as { risks: string[] }).risks.join(' ')).toContain('уведомления');
-      expect(t.app.operations.countByStatus()).toEqual({});
+      expect(await t.app.operations.countByStatus()).toEqual({});
     });
 
     it('полный путь: APPROVAL_REQUIRED → подтверждение → одна задача → сверка ответственного и срока → replay', async () => {
@@ -218,7 +218,7 @@ describe('task_create', () => {
       const operationId = prep.error?.details['operationId'] as string;
       expect(t.bitrix.callsTo('tasks.task.add')).toHaveLength(0);
 
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('task_create', { ...args, approvalId: operationId });
       expect(done.success).toBe(true);
       expect(done.data).toMatchObject({
@@ -260,7 +260,7 @@ describe('task_create', () => {
       const args = { title: 'x', responsibleId: 7, idempotencyKey: key };
       const prep = await call('task_create', args);
       const operationId = prep.error?.details['operationId'] as string;
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('task_create', { ...args, approvalId: operationId });
       expect(done.success).toBe(true);
       expect(done.data?.['verified']).toBe(false);
@@ -274,7 +274,7 @@ describe('task_create', () => {
       const args = { title: 'x', responsibleId: 7, idempotencyKey: key };
       const prep = await call('task_create', args);
       const operationId = prep.error?.details['operationId'] as string;
-      t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+      await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
       const done = await call('task_create', { ...args, approvalId: operationId });
       expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
       const retry = await call('task_create', { ...args, approvalId: operationId });

@@ -8,7 +8,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { AppError } from '../errors/app-error.js';
 import type { SecretBox } from '../security/crypto.js';
-import type { Database } from '../storage/database.js';
+import type { SqlDb } from '../storage/sql.js';
 import type { JsonValue } from './legacy-adapter.js';
 
 export interface CursorBinding {
@@ -40,34 +40,39 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
+/** Курсоры арендатора (SaaS-ТЗ §6.2): курсор другого арендатора неотличим от несуществующего. */
 export class CursorStore {
   constructor(
-    private readonly db: Database,
+    private readonly db: SqlDb,
     private readonly box: SecretBox,
     private readonly ttlSeconds: number,
+    readonly tenantId: string,
   ) {}
 
-  create(binding: CursorBinding, state: unknown): string {
+  async create(binding: CursorBinding, state: unknown): Promise<string> {
     const id = randomBytes(24).toString('base64url');
     const now = Date.now();
-    this.db.run(
-      'INSERT INTO cursors (id, principal_id, portal_key, tool, binding_hash, state_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      id,
-      binding.principalId,
-      binding.portalKey,
-      binding.tool,
-      binding.bindingHash,
-      this.box.encrypt(JSON.stringify(state), id),
-      new Date(now).toISOString(),
-      new Date(now + this.ttlSeconds * 1000).toISOString(),
+    await this.db.withTenant(this.tenantId, (x) =>
+      x.run(
+        'INSERT INTO cursors (id, tenant_id, principal_id, portal_key, tool, binding_hash, state_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        id,
+        this.tenantId,
+        binding.principalId,
+        binding.portalKey,
+        binding.tool,
+        binding.bindingHash,
+        this.box.encrypt(JSON.stringify(state), id),
+        new Date(now).toISOString(),
+        new Date(now + this.ttlSeconds * 1000).toISOString(),
+      ),
     );
     return id;
   }
 
   /** Загружает и удаляет курсор (одноразовый). Несовпадение привязки — ошибка без чтения состояния. */
-  consume<T>(id: string, binding: CursorBinding): T {
-    const state = this.peek<T>(id, binding);
-    this.discard(id);
+  async consume<T>(id: string, binding: CursorBinding): Promise<T> {
+    const state = await this.peek<T>(id, binding);
+    await this.discard(id);
     return state;
   }
 
@@ -75,17 +80,20 @@ export class CursorStore {
    * Загружает курсор, не расходуя его: страница читается до удаления, чтобы временная ошибка портала
    * не лишала продолжения. После успешной загрузки вызывающий обязан вызвать discard().
    */
-  peek<T>(id: string, binding: CursorBinding): T {
-    const row = this.db.get<{
-      principal_id: string;
-      portal_key: string;
-      tool: string;
-      binding_hash: string;
-      state_json: string;
-      expires_at: string;
-    }>(
-      'SELECT principal_id, portal_key, tool, binding_hash, state_json, expires_at FROM cursors WHERE id = ?',
-      id,
+  async peek<T>(id: string, binding: CursorBinding): Promise<T> {
+    const row = await this.db.withTenant(this.tenantId, (x) =>
+      x.get<{
+        principal_id: string;
+        portal_key: string;
+        tool: string;
+        binding_hash: string;
+        state_json: string;
+        expires_at: string;
+      }>(
+        'SELECT principal_id, portal_key, tool, binding_hash, state_json, expires_at FROM cursors WHERE tenant_id = ? AND id = ?',
+        this.tenantId,
+        id,
+      ),
     );
     const invalid = () =>
       new AppError(
@@ -106,18 +114,26 @@ export class CursorStore {
       throw invalid();
     }
     if (Date.parse(row.expires_at) < Date.now()) {
-      this.discard(id);
+      await this.discard(id);
       throw invalid();
     }
     return JSON.parse(this.box.decrypt(row.state_json, id)) as T;
   }
 
-  discard(id: string): void {
-    this.db.run('DELETE FROM cursors WHERE id = ?', id);
+  async discard(id: string): Promise<void> {
+    await this.db.withTenant(this.tenantId, (x) =>
+      x.run('DELETE FROM cursors WHERE tenant_id = ? AND id = ?', this.tenantId, id),
+    );
   }
 
-  cleanupExpired(): void {
-    this.db.run('DELETE FROM cursors WHERE expires_at < ?', new Date().toISOString());
+  async cleanupExpired(): Promise<void> {
+    await this.db.withTenant(this.tenantId, (x) =>
+      x.run(
+        'DELETE FROM cursors WHERE tenant_id = ? AND expires_at < ?',
+        this.tenantId,
+        new Date().toISOString(),
+      ),
+    );
   }
 }
 
@@ -156,7 +172,7 @@ export async function paginateLegacy(opts: {
 }): Promise<PageResult> {
   const maxCalls = opts.maxUpstreamCalls ?? 2;
   let state: LegacyPageState = opts.cursor
-    ? opts.store.peek<LegacyPageState>(opts.cursor, opts.binding)
+    ? await opts.store.peek<LegacyPageState>(opts.cursor, opts.binding)
     : { start: 0, buffer: [] };
   let items: JsonValue[] = [...state.buffer];
   let upstreamTotal: number | undefined;
@@ -171,12 +187,15 @@ export async function paginateLegacy(opts: {
     if (page.items.length === 0) state = { start: undefined, buffer: [] };
   }
   // Курсор расходуется только после успешной загрузки: сбой портала выше оставляет его рабочим.
-  if (opts.cursor) opts.store.discard(opts.cursor);
+  if (opts.cursor) await opts.store.discard(opts.cursor);
   const pageItems = items.slice(0, opts.pageSize);
   const remainder = items.slice(opts.pageSize);
   const hasMore = remainder.length > 0 || state.start !== undefined;
   const nextCursor = hasMore
-    ? opts.store.create(opts.binding, { start: state.start, buffer: remainder } satisfies LegacyPageState)
+    ? await opts.store.create(opts.binding, {
+        start: state.start,
+        buffer: remainder,
+      } satisfies LegacyPageState)
     : null;
   return { items: pageItems, nextCursor, hasMore, upstreamTotal, upstreamCalls: calls };
 }

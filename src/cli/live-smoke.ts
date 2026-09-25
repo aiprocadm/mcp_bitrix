@@ -39,6 +39,7 @@ async function main(): Promise<void> {
   const config = cliConfig(args);
   assertLiveAllowed(config, mode);
   const app = createApp(config, { logger: createSilentLogger() });
+  await app.ready;
   const reportPath = path.resolve(
     config.baseDir,
     args.values['report'] ?? path.join(config.storage.dataDir, 'live-smoke-report.json'),

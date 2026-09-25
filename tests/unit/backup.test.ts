@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AppError } from '../../src/errors/app-error.js';
 import { createBackup, restoreBackup } from '../../src/ops/backup.js';
 import { Database } from '../../src/storage/database.js';
+import { SqliteSqlDb } from '../../src/storage/sqlite-db.js';
 import { OperationsStore } from '../../src/storage/operations.js';
 import { testConfig } from '../helpers/app.js';
 
@@ -30,11 +31,11 @@ function configIn(dir: string) {
 }
 
 describe('backup / restore (§17.7, T45)', () => {
-  it('снимок SQLite + политики шифруются; восстановление в новую папку читаемо, pending операции посчитаны и не исполнены', () => {
+  it('снимок SQLite + политики шифруются; восстановление в новую папку читаемо, pending операции посчитаны и не исполнены', async () => {
     const config = configIn(root);
     const db = Database.open(config.storage.databasePath);
-    const ops = new OperationsStore(db);
-    ops.createPrepared({
+    const ops = new OperationsStore(new SqliteSqlDb(db), 'local');
+    await ops.createPrepared({
       id: '11111111-1111-4111-8111-111111111111',
       principalId: 'owner',
       portalKey: 'k',
@@ -65,7 +66,9 @@ describe('backup / restore (§17.7, T45)', () => {
     expect(r.pendingOperations).toEqual({ prepared: 1 });
     expect(readFileSync(path.join(r.dir, 'policies', 'methods.json'), 'utf8')).toContain('rawAllowlist');
     const restored = Database.open(r.sqliteFile);
-    expect(new OperationsStore(restored).countByStatus()).toEqual({ prepared: 1 });
+    expect(await new OperationsStore(new SqliteSqlDb(restored), 'local').countByStatus()).toEqual({
+      prepared: 1,
+    });
     restored.close();
   });
 

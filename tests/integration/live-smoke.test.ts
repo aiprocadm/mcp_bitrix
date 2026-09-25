@@ -230,7 +230,7 @@ describe('live-smoke (§10.3) на mock', () => {
     const prep = await prepareWrites(t.app, plans);
     expect(prep.every((s) => s.status === 'passed')).toBe(true);
     expect(plans.every((p) => typeof p.operationId === 'string')).toBe(true);
-    expect(t.app.operations.countByStatus()).toEqual({ prepared: 5 });
+    expect(await t.app.operations.countByStatus()).toEqual({ prepared: 5 });
 
     const blocked = await executeWrites(t.app, plans);
     expect(
@@ -245,7 +245,7 @@ describe('live-smoke (§10.3) на mock', () => {
     ])
       expect(t.bitrix.callsTo(m)).toHaveLength(0);
 
-    for (const p of plans) t.app.approvals.approve(p.operationId ?? '', 'owner', t.app.auth.portalKey);
+    for (const p of plans) await t.app.approvals.approve(p.operationId ?? '', 'owner', t.app.auth.portalKey);
     const done = await executeWrites(t.app, plans);
     expect(done.steps.map((s) => s.status)).toEqual(Array<string>(10).fill('passed'));
     expect(done.createdIds).toEqual({ сделка: 901, задача: 902, сообщение: 903, файл: 904, событие: 905 });
@@ -257,6 +257,6 @@ describe('live-smoke (§10.3) на mock', () => {
       'calendar.event.add',
     ])
       expect(t.bitrix.callsTo(m)).toHaveLength(1);
-    expect(t.app.operations.countByStatus()).toEqual({ succeeded: 5 });
+    expect(await t.app.operations.countByStatus()).toEqual({ succeeded: 5 });
   });
 });

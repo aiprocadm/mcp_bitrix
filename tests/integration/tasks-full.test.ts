@@ -49,7 +49,7 @@ async function approveAndRun(name: string, args: Record<string, unknown>) {
   const prep = await call(name, args);
   expect(prep.error?.code).toBe('APPROVAL_REQUIRED');
   const operationId = prep.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(name, { ...args, approvalId: operationId });
   return { prep, done, operationId };
 }
@@ -126,7 +126,7 @@ describe('task_update', () => {
       expect(env.error?.code, reason).toBe('VALIDATION_ERROR');
       expect(env.error?.details['reason']).toBe(reason);
     }
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('tasks.task.update')).toHaveLength(0);
   });
 
@@ -141,7 +141,7 @@ describe('task_update', () => {
       idempotencyKey: randomUUID(),
     });
     expect(stale.error?.code).toBe('CONFLICT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const fresh = (await call('task_get', { taskId: 100 })).data?.['stateHash'] as string;
     const args = {
@@ -152,7 +152,7 @@ describe('task_update', () => {
     };
     const prep = await call('task_update', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     portal.touch(100); // изменение между подтверждением и записью
     const raced = await call('task_update', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -192,7 +192,7 @@ describe('task_complete (T30)', () => {
     expect(env.success).toBe(false);
     expect(env.error?.code).toBe('VALIDATION_ERROR');
     expect(env.error?.details['reason']).toBe('RESULT_REQUIRED');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('tasks.task.complete')).toHaveLength(0);
     // v3-запрос по документации: id + select нужных признаков
     const v3 = t.bitrix.callsTo('tasks.task.get').find((c) => c.url.includes('/rest/api/'));
@@ -207,7 +207,7 @@ describe('task_complete (T30)', () => {
     const args = { taskId: 200, idempotencyKey: randomUUID() };
     const prep = await call('task_complete', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     portal.flags.set(200, { requireResult: true, containsResults: false, needsControl: false });
     const done = await call('task_complete', { ...args, approvalId: operationId });
     expect(done.error?.details['reason']).toBe('RESULT_REQUIRED');
@@ -295,7 +295,7 @@ describe('task_delete (этап 14)', () => {
     await start({ ENABLE_DESTRUCTIVE_TOOLS: 'true' });
     const missing = await call('task_delete', { taskId: 999, idempotencyKey: randomUUID() });
     expect(missing.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     portal.addTask(101, { parentId: '100' });
     portal.addTask(102, { parentId: '100' });
@@ -327,7 +327,7 @@ describe('task_delete (этап 14)', () => {
     const args = { taskId: 100, expectedStateHash: hash, idempotencyKey: randomUUID() };
     const prep = await call('task_delete', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     portal.touch(100);
     const raced = await call('task_delete', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -376,7 +376,7 @@ describe('чек-листы (позиционные параметры стар�
       idempotencyKey: randomUUID(),
     });
     expect(foreign.error?.details['reason']).toBe('PARENT_NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const args = { taskId: 100, title: 'Подписать договор', parentId: 431, idempotencyKey: randomUUID() };
     const { done } = await approveAndRun('task_checklist_add', args);
@@ -393,7 +393,7 @@ describe('чек-листы (позиционные параметры стар�
     const args = { taskId: 100, title: 'Подписать договор', parentId: 431, idempotencyKey: randomUUID() };
     const prep = await call('task_checklist_add', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     // Обработчик при повторе ещё видит родителя; удаление приходится на окно перед записью (чтение в precheck).
     const reads = t.bitrix.callsTo('task.checklistitem.getlist').length;
     t.bitrix.on('task.checklistitem.getlist', (c) => {
@@ -455,7 +455,7 @@ describe('чек-листы (позиционные параметры стар�
       idempotencyKey: randomUUID(),
     });
     expect(foreign.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
 
     const { done } = await approveAndRun('task_checklist_set_complete', {
       taskId: 100,
@@ -587,7 +587,7 @@ describe('обсуждение задачи (T29)', () => {
     const args = { taskId: 200, text: 'Текст', idempotencyKey: randomUUID() };
     const prep = await call('task_comment_add', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     t.bitrix.on('tasks.task.chat.message.send', {
       status: 404,
       body: { error: { code: 'METHOD_NOT_FOUND', message: 'Method not found' } },

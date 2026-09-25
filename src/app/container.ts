@@ -9,7 +9,7 @@
 import { WebhookAuthProvider } from '../auth/webhook-provider.js';
 import type { BitrixAuthProvider } from '../auth/bitrix-auth-provider.js';
 import { resolveLocalPrincipal, type Principal } from '../auth/principal.js';
-import { CapabilityService } from '../bitrix/capabilities.js';
+import { CAPABILITIES_TTL_MS, CapabilityService } from '../bitrix/capabilities.js';
 import { BitrixClient, type FetchLike } from '../bitrix/client.js';
 import { CursorStore } from '../bitrix/pagination.js';
 import { RateLimiter } from '../bitrix/rate-limiter.js';
@@ -27,6 +27,9 @@ import { ensureMasterKey, SecretBox } from '../security/crypto.js';
 import { MutationExecutor } from '../security/mutation-executor.js';
 import { OutputPolicyEngine } from '../security/output-policy.js';
 import { Database } from '../storage/database.js';
+import { MemoryTtlCache } from '../storage/memory-cache.js';
+import type { SqlDb } from '../storage/sql.js';
+import { SqliteSqlDb } from '../storage/sqlite-db.js';
 import { OperationsStore } from '../storage/operations.js';
 import { allTools } from '../tools/index.js';
 import type { ToolDefinition } from '../tools/types.js';
@@ -38,10 +41,16 @@ export interface Platform {
   readonly config: AppConfig;
   readonly policies: Policies;
   readonly logger: AppLogger;
-  readonly db: Database;
+  /** Асинхронное SQL-хранилище (SQLite в single, PostgreSQL в saas). */
+  readonly db: SqlDb;
+  /** Синхронный SQLite режима single (панель /admin, doctor, бэкап); в saas отсутствует. */
+  readonly sqlite: Database | undefined;
   readonly secretBox: SecretBox;
   readonly audit: AuditLog;
-  readonly files: FileStaging;
+  /** Staging файлов без привязки к арендатору; арендатору выдаётся fileStaging.forTenant(id). */
+  readonly fileStaging: FileStaging;
+  /** Кэш метаданных порталов (capabilities, поля CRM) в памяти процесса. */
+  readonly metadataCache: MemoryTtlCache;
   /** Учётные записи и сессии панели /admin. */
   readonly admin: AdminAccounts;
   readonly outputPolicy: OutputPolicyEngine;
@@ -64,7 +73,11 @@ export interface TenantScope {
   readonly approvals: ApprovalService;
   readonly mutations: MutationExecutor;
   readonly principal: Principal;
+  /** Файлы арендатора: fileToken и манифесты видны только внутри него. */
+  readonly files: FileStaging;
   readonly tools: readonly ToolDefinition[];
+  /** Обслуживание при старте арендатора (T16: executing → unknown, истёкшие планы/курсоры/файлы). */
+  readonly ready: Promise<void>;
 }
 
 export interface AppContainer extends Platform, TenantScope {
@@ -93,9 +106,10 @@ export function createPlatform(config: AppConfig, opts: CreateAppOptions = {}): 
   });
   const key = opts.masterKey ?? ensureMasterKey(config.storage.secretsKeyFile, { create: false }).key;
   const secretBox = new SecretBox(key);
-  const db = Database.open(opts.inMemoryDatabase ? ':memory:' : config.storage.databasePath);
+  const sqlite = Database.open(opts.inMemoryDatabase ? ':memory:' : config.storage.databasePath);
+  const db = new SqliteSqlDb(sqlite);
   const audit = new AuditLog(db, key, logger, config.logging.auditEnabled, config.logging.auditRetentionDays);
-  const files = new FileStaging(
+  const fileStaging = new FileStaging(
     db,
     {
       uploadRoot: config.storage.uploadRoot,
@@ -107,24 +121,26 @@ export function createPlatform(config: AppConfig, opts: CreateAppOptions = {}): 
       scanner: opts.scanner ?? createScanner(config.files.scannerUrl),
     },
     logger,
+    'local',
   );
-  files.cleanupExpired();
-  const admin = new AdminAccounts(db, (id) => policies.access.principals[id]?.role);
+  const admin = new AdminAccounts(sqlite, (id) => policies.access.principals[id]?.role);
   admin.cleanupExpired();
   return {
     config,
     policies,
     logger,
     db,
+    sqlite,
     secretBox,
     audit,
-    files,
+    fileStaging,
+    metadataCache: new MemoryTtlCache(CAPABILITIES_TTL_MS),
     admin,
     outputPolicy: new OutputPolicyEngine(policies.output),
     inboundLimiter: new InboundLimiter(config.server.inboundReadPerMinute),
     fetch: opts.fetch ?? ((url, init) => globalThis.fetch(url, init)),
     close() {
-      db.close();
+      sqlite.close();
     },
   };
 }
@@ -159,13 +175,23 @@ export function createTenantScope(platform: Platform, spec: TenantSpec): TenantS
     maxUpstreamResponseBytes: config.bitrix.maxUpstreamResponseBytes,
     maxReadRetries: config.bitrix.maxReadRetries,
   });
-  const capabilities = new CapabilityService(db, bitrix);
-  const cursors = new CursorStore(db, secretBox, config.limits.cursorTtlSeconds);
-  const operations = new OperationsStore(db);
-  const recovered = operations.recoverAfterRestart();
-  if (recovered > 0) logger.warn({ recovered }, 'operations in executing state marked unknown after restart');
-  operations.expireStale();
-  cursors.cleanupExpired();
+  const capabilities = new CapabilityService(platform.metadataCache, bitrix);
+  const cursors = new CursorStore(db, secretBox, config.limits.cursorTtlSeconds, spec.tenantId);
+  const operations = new OperationsStore(db, spec.tenantId);
+  const files = platform.fileStaging.forTenant(spec.tenantId);
+  const ready = (async () => {
+    const recovered = await operations.recoverAfterRestart();
+    if (recovered > 0)
+      logger.warn({ recovered }, 'operations in executing state marked unknown after restart');
+    await operations.expireStale();
+    await cursors.cleanupExpired();
+    await files.cleanupExpired();
+    await audit.cleanup(spec.tenantId);
+  })();
+  // Ошибка обслуживания не должна стать необработанным отказом; ожидающий ready её получит.
+  ready.catch((e: unknown) => {
+    logger.error({ reason: e instanceof Error ? e.name : 'unknown' }, 'tenant maintenance failed');
+  });
   const approvals = new ApprovalService(
     operations,
     secretBox,
@@ -189,8 +215,15 @@ export function createTenantScope(platform: Platform, spec: TenantSpec): TenantS
     approvals,
     mutations,
     principal: spec.principal,
+    files,
+    ready,
     tools: allTools().filter((t) => config.policy.enabledModules.has(t.module)),
   };
+}
+
+/** Контейнер вызова: платформа + контекст арендатора (single — единственный; saas — на запрос). */
+export function assembleApp(platform: Platform, scope: TenantScope): AppContainer {
+  return { ...platform, ...scope, platform, scope, close: () => platform.close() };
 }
 
 /** Режим single: платформа + единственный арендатор `local` с вебхуком из конфигурации. */
@@ -220,7 +253,7 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
       auth: new WebhookAuthProvider(config.bitrix.webhook),
       principal,
     });
-    return { ...platform, ...scope, platform, scope, close: () => platform.close() };
+    return assembleApp(platform, scope);
   } catch (e) {
     platform.close();
     throw e;

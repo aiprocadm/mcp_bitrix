@@ -32,7 +32,7 @@ async function call(args: Record<string, unknown>): Promise<Envelope> {
 async function approveAndRun(args: Record<string, unknown>): Promise<{ env: Envelope; operationId: string }> {
   const prep = await call(args);
   const operationId = opId(prep);
-  t.app.approvals.approve(operationId, t.app.principal.id, t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, t.app.principal.id, t.app.auth.portalKey);
   const env = await call({ ...args, approvalId: operationId });
   return { env, operationId };
 }
@@ -59,14 +59,14 @@ describe('подтверждения (ТЗ §8.2)', () => {
     expect(err?.details.nextAction).toContain('approval:review');
     expect(hooks.performCalls).toBe(0);
     expect(t.bitrix.calls).toHaveLength(0);
-    const view = t.app.operations.view(opId(env), 'owner', t.app.auth.portalKey);
+    const view = await t.app.operations.view(opId(env), 'owner', t.app.auth.portalKey);
     expect(view?.status).toBe('prepared');
   });
 
   it('dryRun: план без ledger, без ключа и без записи', async () => {
     const env = await call({ title: 'x', dryRun: true });
     expect(env.success).toBe(true);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(hooks.performCalls).toBe(0);
   });
 
@@ -102,8 +102,10 @@ describe('подтверждения (ТЗ §8.2)', () => {
     expect(hooks.performCalls).toBe(1);
     expect(hooks.verifyCalls).toBe(1);
     expect(t.bitrix.callsTo('crm.deal.add')).toHaveLength(1);
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('succeeded');
-    const audit = t.app.db.all<{ outcome: string; approval_id: string | null }>(
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe(
+      'succeeded',
+    );
+    const audit = await t.app.db.all<{ outcome: string; approval_id: string | null }>(
       'SELECT outcome, approval_id FROM audit WHERE approval_id IS NOT NULL',
     );
     expect(audit.map((a) => a.outcome)).toEqual(['prepared', 'success']);
@@ -129,12 +131,14 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const prep = await call({ title: 'x', idempotencyKey: key });
     const operationId = opId(prep);
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const changed = await call({ title: 'ДРУГОЙ ТЕКСТ', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(changed)?.code).toBe('IDEMPOTENCY_CONFLICT');
     const otherKey = await call({ title: 'x', idempotencyKey: randomUUID(), approvalId: operationId });
     expect(errorOf(otherKey)?.code).toBe('APPROVAL_MISMATCH');
-    expect(() => t.app.approvals.readPlan(operationId, 'intruder', t.app.auth.portalKey)).toThrow(AppError);
+    await expect(t.app.approvals.readPlan(operationId, 'intruder', t.app.auth.portalKey)).rejects.toThrow(
+      AppError,
+    );
     expect(hooks.performCalls).toBe(0);
     // подтверждение осталось в силе для верных параметров
     const okEnv = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
@@ -153,7 +157,7 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const args = { title: 'x', idempotencyKey: key };
     const prep = await call(args);
     const operationId = opId(prep);
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const [a, b] = await Promise.all([
       call({ ...args, approvalId: operationId }),
       call({ ...args, approvalId: operationId }),
@@ -173,8 +177,13 @@ describe('подтверждения (ТЗ §8.2)', () => {
     if (!def) throw new Error('tool');
     const prep = await dispatch(def, { title: 'x', idempotencyKey: key }, t2.app);
     const operationId = opId(prep);
-    t2.app.db.run("UPDATE operations SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?", operationId);
-    expect(() => t2.app.approvals.approve(operationId, 'owner', t2.app.auth.portalKey)).toThrow(AppError);
+    await t2.app.db.run(
+      "UPDATE operations SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?",
+      operationId,
+    );
+    await expect(t2.app.approvals.approve(operationId, 'owner', t2.app.auth.portalKey)).rejects.toThrow(
+      AppError,
+    );
     const env = await dispatch(def, { title: 'x', idempotencyKey: key, approvalId: operationId }, t2.app);
     expect(errorOf(env)?.code).toBe('APPROVAL_EXPIRED');
     expect(hooks.performCalls).toBe(0);
@@ -185,7 +194,7 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const prep = await call({ title: 'x', idempotencyKey: key });
     const operationId = opId(prep);
-    t.app.approvals.deny(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.deny(operationId, 'owner', t.app.auth.portalKey);
     const env = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(env)?.code).toBe('ACCESS_DENIED');
     const again = await call({ title: 'x', idempotencyKey: key });
@@ -200,7 +209,7 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const { env, operationId } = await approveAndRun({ title: 'x', idempotencyKey: key });
     expect(errorOf(env)?.code).toBe('CONFLICT');
     expect(hooks.performCalls).toBe(0);
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('failed');
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe('failed');
     hooks.failPrecheckWith = undefined;
     const retry = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(retry)?.code).toBe('CONFLICT');
@@ -212,14 +221,14 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const prep = await call({ title: 'x', idempotencyKey: key });
     const operationId = opId(prep);
-    t.app.approvals.approve(operationId, t.app.principal.id, t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, t.app.principal.id, t.app.auth.portalKey);
     hooks.portalState = { mode: 'update', priceId: 5 };
     const env = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(env)?.code).toBe('CONFLICT');
     expect(errorOf(env)?.details['reason']).toBe('PLAN_CHANGED');
     expect(hooks.performCalls).toBe(0);
     expect(t.bitrix.callsTo('crm.deal.add')).toHaveLength(0);
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('failed');
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe('failed');
     // состояние вернулось — старое подтверждение всё равно мертво, нужен новый план
     hooks.portalState = { mode: 'create' };
     const retry = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
@@ -232,7 +241,7 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const { env, operationId } = await approveAndRun({ title: 'x', idempotencyKey: key });
     expect(errorOf(env)?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('unknown');
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe('unknown');
     t.bitrix.on('crm.deal.add', legacyOk(102));
     const retry = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(retry)?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
@@ -252,10 +261,10 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const prep = await call({ title: 'x', idempotencyKey: key });
     const operationId = opId(prep);
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
-    expect(t.app.operations.tryStartExecuting(operationId)).toBe(true);
-    expect(t.app.operations.recoverAfterRestart()).toBe(1);
-    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('unknown');
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    expect(await t.app.operations.tryStartExecuting(operationId)).toBe(true);
+    expect(await t.app.operations.recoverAfterRestart()).toBe(1);
+    expect((await t.app.operations.view(operationId, 'owner', t.app.auth.portalKey))?.status).toBe('unknown');
     const env = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
     expect(errorOf(env)?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     expect(hooks.performCalls).toBe(0);
@@ -273,10 +282,10 @@ describe('подтверждения (ТЗ §8.2)', () => {
   });
 
   it('T44 для записи: недоступный журнал аудита запрещает подготовку (AUDIT_UNAVAILABLE), чтение работает', async () => {
-    t.app.db.run('DROP TABLE audit');
+    await t.app.db.run('DROP TABLE audit');
     const env = await call({ title: 'x', idempotencyKey: randomUUID() });
     expect(errorOf(env)?.code).toBe('AUDIT_UNAVAILABLE');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     const read = await dispatch(
       t.app.tools.find((x) => x.name === 'bitrix_server_version') as never,
       {},
@@ -298,11 +307,11 @@ describe('подтверждения (ТЗ §8.2)', () => {
     const key = randomUUID();
     const prep = await call({ title: 'секретный текст плана', idempotencyKey: key });
     const operationId = opId(prep);
-    const pending = t.app.approvals.listPending('owner', t.app.auth.portalKey);
+    const pending = await t.app.approvals.listPending('owner', t.app.auth.portalKey);
     expect(pending.map((p) => p.operationId)).toEqual([operationId]);
-    const { plan } = t.app.approvals.readPlan(operationId, 'owner', t.app.auth.portalKey);
+    const { plan } = await t.app.approvals.readPlan(operationId, 'owner', t.app.auth.portalKey);
     expect(plan.summary.details).toEqual({ TITLE: 'секретный текст плана' });
-    const row = t.app.db.get<{ plan_encrypted: string }>(
+    const row = await t.app.db.get<{ plan_encrypted: string }>(
       'SELECT plan_encrypted FROM operations WHERE id = ?',
       operationId,
     );

@@ -464,7 +464,7 @@ describe('запись: комментарий и замена товаров', 
       idempotencyKey: randomUUID(),
     });
     expect(missing.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     const args = {
       entityType: 'deal',
       recordId: 5,
@@ -478,7 +478,7 @@ describe('запись: комментарий и замена товаров', 
       details: { text: 'Согласовали скидку 5%' },
     });
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_timeline_comment_add', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ commentId: 901, verified: true, replayed: false });
     expect(t.bitrix.callsTo('crm.timeline.comment.add')[0]?.body).toEqual({
@@ -497,7 +497,7 @@ describe('запись: комментарий и замена товаров', 
     });
     expect(blocked.error?.code).toBe('VALIDATION_ERROR');
     expect(blocked.error?.details['reason']).toBe('EMPTY_REPLACEMENT_BLOCKED');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('crm.item.productrow.set')).toHaveLength(0);
 
     const key = randomUUID();
@@ -514,7 +514,7 @@ describe('запись: комментарий и замена товаров', 
     expect((plan.details['removed'] as unknown[]).length).toBe(2);
     // Подтверждение пустой замены нельзя «перенести» на вызов без allowEmpty: другие аргументы → другой хеш
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const mismatch = await call('crm_deal_products_replace', {
       dealId: 5,
       productRows: [],
@@ -570,7 +570,7 @@ describe('запись: комментарий и замена товаров', 
     const args = { dealId: 5, productRows: newRows, expectedStateHash: fresh, idempotencyKey: randomUUID() };
     const prep = await call('crm_deal_products_replace', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     rows = rows.slice(0, 2); // изменение между подтверждением и записью
     const raced = await call('crm_deal_products_replace', { ...args, approvalId: operationId });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -589,7 +589,7 @@ describe('запись: комментарий и замена товаров', 
       'expectedStateHash не передан',
     );
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_deal_products_replace', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ verified: true, replayed: false, savedCount: 1 });
     expect(t.bitrix.callsTo('crm.item.productrow.set')[0]?.body).toEqual({
@@ -616,7 +616,7 @@ describe('запись: комментарий и замена товаров', 
     };
     const prep = await call('crm_deal_products_replace', args);
     const operationId = prep.error?.details['operationId'] as string;
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const done = await call('crm_deal_products_replace', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     const retry = await call('crm_deal_products_replace', { ...args, approvalId: operationId });

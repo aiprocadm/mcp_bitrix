@@ -20,7 +20,7 @@ describe('лимит входящих вызовов', () => {
       expect(third.success).toBe(false);
       expect(third.error.code).toBe('RATE_LIMITED');
       expect(third.error.details.nextAction).toMatch(/Повторите/);
-      const rows = t.app.db.all<{ outcome: string; error_code: string | null }>(
+      const rows = await t.app.db.all<{ outcome: string; error_code: string | null }>(
         "SELECT outcome, error_code FROM audit WHERE tool = 'bitrix_server_version' ORDER BY id",
       );
       expect(rows.map((r) => r.outcome)).toEqual(['success', 'success', 'denied']);

@@ -108,7 +108,7 @@ export class MutationExecutor {
         validationLevel: req.validationLevel ?? 'local',
       };
     }
-    this.audit.assertAvailableForWrite();
+    await this.audit.assertAvailableForWrite();
     const key = typeof req.args['idempotencyKey'] === 'string' ? req.args['idempotencyKey'] : undefined;
     if (!key) {
       throw new AppError('VALIDATION_ERROR', 'idempotencyKey обязателен для реальной записи', {
@@ -132,7 +132,7 @@ export class MutationExecutor {
       (typeof req.args['expectedStateHash'] === 'string' ? req.args['expectedStateHash'] : null);
     const fileHash = req.fileHash ?? null;
 
-    const existing = this.ops.findIdempotency(req.principal.id, req.principal.portalKey, req.tool, key);
+    const existing = await this.ops.findIdempotency(req.principal.id, req.principal.portalKey, req.tool, key);
     if (existing && existing.args_hash !== hash) {
       throw new AppError(
         'IDEMPOTENCY_CONFLICT',
@@ -147,7 +147,7 @@ export class MutationExecutor {
     if (approvalId) return this.runApproved(req, key, hash, approvalId, expectedStateHash, fileHash);
 
     if (existing) {
-      const op = this.ops.get(existing.operation_id);
+      const op = await this.ops.get(existing.operation_id);
       if (op) {
         const handled = this.handleExistingWithoutApproval(op, req);
         if (handled) return handled;
@@ -170,15 +170,15 @@ export class MutationExecutor {
     return undefined;
   }
 
-  private prepare(
+  private async prepare(
     req: MutationRequest,
     key: string,
     hash: string,
     expectedStateHash: string | null,
     fileHash: string | null,
-  ): never {
+  ): Promise<never> {
     this.checkPreparationRate(req.principal.id);
-    const prepared = this.approvals.prepare({
+    const prepared = await this.approvals.prepare({
       tool: req.tool,
       operationKind: req.operationKind,
       principalId: req.principal.id,
@@ -191,7 +191,7 @@ export class MutationExecutor {
       fileHash,
       idempotencyKey: key,
     });
-    this.ops.upsertIdempotency({
+    await this.ops.upsertIdempotency({
       principal_id: req.principal.id,
       portal_key: req.principal.portalKey,
       tool: req.tool,
@@ -200,7 +200,8 @@ export class MutationExecutor {
       operation_id: prepared.operationId,
       expires_at: new Date(Date.now() + this.opts.idempotencyTtlHours * 3_600_000).toISOString(),
     });
-    this.audit.record({
+    await this.audit.record({
+      tenantId: this.ops.tenantId,
       requestId: req.requestId,
       principalId: req.principal.id,
       portalKey: req.principal.portalKey,
@@ -223,7 +224,7 @@ export class MutationExecutor {
     expectedStateHash: string | null,
     fileHash: string | null,
   ): Promise<MutationOutcome> {
-    const op = this.ops.getOwn(approvalId, req.principal.id, req.principal.portalKey);
+    const op = await this.ops.getOwn(approvalId, req.principal.id, req.principal.portalKey);
     // T14: чужой principal/portal, другой инструмент, другие аргументы, другая политика — единый отказ.
     if (
       op?.tool !== req.tool ||
@@ -266,7 +267,7 @@ export class MutationExecutor {
         break;
     }
     if (Date.parse(op.expires_at) < Date.now()) throw expired(op.id);
-    if (!this.ops.tryStartExecuting(op.id)) throw inProgress(op.id);
+    if (!(await this.ops.tryStartExecuting(op.id))) throw inProgress(op.id);
 
     const warnings: string[] = [];
     let performed: PerformResult;
@@ -276,7 +277,8 @@ export class MutationExecutor {
       // портала; если действие, цель или детали (режим create/update, итоговые параметры, diff) разошлись
       // с подтверждёнными — записи нет, операция failed, нужен новый план. Работает и без expectedStateHash;
       // специфичные проверки инструмента (precheck) идут раньше и дают более точную причину.
-      const approved = this.approvals.readPlan(op.id, req.principal.id, req.principal.portalKey).plan.summary;
+      const approved = (await this.approvals.readPlan(op.id, req.principal.id, req.principal.portalKey)).plan
+        .summary;
       if (!samePlan(approved, req.summary)) {
         throw new AppError(
           'CONFLICT',
@@ -292,8 +294,9 @@ export class MutationExecutor {
     } catch (e) {
       const err = AppError.from(e);
       const status = err.code === 'OPERATION_OUTCOME_UNKNOWN' ? 'unknown' : 'failed';
-      this.ops.finish(op.id, status, { errorCode: err.code, errorMessage: err.message });
-      this.audit.record({
+      await this.ops.finish(op.id, status, { errorCode: err.code, errorMessage: err.message });
+      await this.audit.record({
+        tenantId: this.ops.tenantId,
         requestId: req.requestId,
         principalId: req.principal.id,
         portalKey: req.principal.portalKey,
@@ -321,8 +324,11 @@ export class MutationExecutor {
       }
     }
     const stored: StoredResult = { id: performed.id, result: performed.result, verified, warnings };
-    this.ops.finish(op.id, 'succeeded', { resultEncrypted: this.box.encrypt(JSON.stringify(stored), op.id) });
-    this.audit.record({
+    await this.ops.finish(op.id, 'succeeded', {
+      resultEncrypted: this.box.encrypt(JSON.stringify(stored), op.id),
+    });
+    await this.audit.record({
+      tenantId: this.ops.tenantId,
       requestId: req.requestId,
       principalId: req.principal.id,
       portalKey: req.principal.portalKey,

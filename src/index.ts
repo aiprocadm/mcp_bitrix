@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   const config = loadConfig({ configPath: args.values['config'] });
   const transport = transportArg ?? config.server.transport;
   const app = createApp({ ...config, server: { ...config.server, transport } });
+  await app.ready;
 
   const handle = transport === 'http' ? await startHttp(app) : await startStdio(app);
 

@@ -296,7 +296,7 @@ export const kb2DocumentGetTool = defineTool({
     const binding = cursorBinding(ctx, tool, { documentId: args.documentId });
     let snap: ContentSnapshot;
     if (args.contentCursor) {
-      snap = ctx.cursors.consume<ContentSnapshot>(args.contentCursor, binding);
+      snap = await ctx.cursors.consume<ContentSnapshot>(args.contentCursor, binding);
       // Снимок зашифрован сервером; хеш сверяется как защита от повреждения.
       if (contentHash(snap.markdown) !== snap.contentHash) {
         throw new AppError('CONFLICT', 'Снимок текста повреждён; начните чтение заново', {
@@ -318,7 +318,7 @@ export const kb2DocumentGetTool = defineTool({
     const chunk = sliceChunk(snap.markdown, snap.offset, maxChars, maxBytes);
     const end = snap.offset + chunk.length;
     const truncated = end < snap.markdown.length;
-    const contentCursor = truncated ? ctx.cursors.create(binding, { ...snap, offset: end }) : null;
+    const contentCursor = truncated ? await ctx.cursors.create(binding, { ...snap, offset: end }) : null;
     const warnings: string[] = [];
     if (truncated) {
       warnings.push(

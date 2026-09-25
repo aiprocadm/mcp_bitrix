@@ -172,6 +172,7 @@ async function main(): Promise<void> {
     });
   } else {
     const app = createApp(config, { logger: createSilentLogger() });
+    await app.ready;
     try {
       const requestId = 'doctor';
       try {

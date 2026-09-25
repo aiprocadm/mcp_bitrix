@@ -242,7 +242,7 @@ async function prepare(tool: string, args: Record<string, unknown>) {
 }
 async function approveAndRun(tool: string, args: Record<string, unknown>) {
   const { operationId, plan } = await prepare(tool, args);
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   const done = await call(tool, { ...args, approvalId: operationId });
   return { operationId, plan, done };
 }
@@ -355,7 +355,7 @@ describe('kb_legacy_article_create (T36)', () => {
       idempotencyKey: randomUUID(),
     });
     expect(pub.error?.details['reason']).toBe('PUBLISH_IS_SEPARATE_ACTION');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('черновик, публикация не вызывается, порядок блоков через цепочку AFTER_ID, сверка, replay', async () => {
@@ -411,7 +411,7 @@ describe('kb_legacy_article_create (T36)', () => {
     expect(done.error?.message).toContain('block 2: failed');
     expect(done.error?.message).toContain('block 3: skipped');
     expect(done.error?.details['nextAction']).toContain('НЕ повторяйте kb_legacy_article_create');
-    expect(t.app.operations.get(operationId)?.status).toBe('succeeded');
+    expect((await t.app.operations.get(operationId))?.status).toBe('succeeded');
 
     failAddBlockAt = undefined;
     const withApproval = await call('kb_legacy_article_create', { ...args, approvalId: operationId });
@@ -439,7 +439,7 @@ describe('kb_legacy_article_create (T36)', () => {
       idempotencyKey: randomUUID(),
     });
     expect(noFolder.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 });
 
@@ -468,7 +468,7 @@ describe('kb_legacy_article_update', () => {
       expectedStateHash: hash,
     });
     expect(foreign.error?.details['reason']).toBe('BLOCK_NOT_ON_PAGE');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 
   it('replace: «было → станет» в плане, замена только указанного блока, переименование, replay', async () => {
@@ -515,7 +515,7 @@ describe('kb_legacy_article_update', () => {
       idempotencyKey: randomUUID(),
     };
     const { operationId } = await prepare('kb_legacy_article_update', args);
-    t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+    await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
     const b = blocks.find((x) => x.id === 301);
     if (b) b.content = '<p>правка из редактора</p>';
     const done = await call('kb_legacy_article_update', { ...args, approvalId: operationId });
@@ -561,7 +561,7 @@ describe('kb_legacy_article_publish', () => {
     const env = await call('kb_legacy_article_publish', { articleId: 43, idempotencyKey: randomUUID() });
     expect(env.error?.details['reason']).toBe('NOT_KNOWLEDGE_BASE');
     expect(t.bitrix.callsTo('landing.landing.publication')).toHaveLength(0);
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
   });
 });
 

@@ -48,9 +48,9 @@ async function restart(overrides: Record<string, string> = {}, extraUsers = [] a
   await reconnect(overrides, extraUsers);
 }
 
-const approve = (env: Env) => {
+const approve = async (env: Env) => {
   const operationId = env.error?.details['operationId'] as string;
-  t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
+  await t.app.approvals.approve(operationId, 'owner', t.app.auth.portalKey);
   return operationId;
 };
 
@@ -152,7 +152,7 @@ describe('запись оргструктуры', () => {
       idempotencyKey: randomUUID(),
     });
     expect(fired.error?.details['reason']).toBe('INVALID_HEAD');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('department.add')).toHaveLength(0);
   });
 
@@ -169,7 +169,7 @@ describe('запись оргструктуры', () => {
     });
     expect(plan.risks.join(' ')).toContain('в корне');
     expect(t.bitrix.callsTo('department.add')).toHaveLength(0);
-    const operationId = approve(prep);
+    const operationId = await approve(prep);
     const done = await call('company_department_create', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ departmentId: 100, verified: true, replayed: false });
     expect(t.bitrix.callsTo('department.add')[0]?.body).toEqual({
@@ -185,7 +185,7 @@ describe('запись оргструктуры', () => {
   it('create: ответ без ID → OPERATION_OUTCOME_UNKNOWN, повтор не создаёт второй отдел', async () => {
     t.bitrix.on('department.add', legacyOk(null));
     const args = { name: 'Юристы', parentId: 1, idempotencyKey: randomUUID() };
-    const operationId = approve(await call('company_department_create', args));
+    const operationId = await approve(await call('company_department_create', args));
     const done = await call('company_department_create', { ...args, approvalId: operationId });
     expect(done.error?.code).toBe('OPERATION_OUTCOME_UNKNOWN');
     const retry = await call('company_department_create', { ...args, approvalId: operationId });
@@ -211,7 +211,7 @@ describe('запись оргструктуры', () => {
     expect(missing.error?.details['reason']).toBe('INVALID_PARENT');
     const root = await call('company_department_update', { id: 1, patch: { parentId: 4 }, dryRun: true });
     expect(root.error?.details['reason']).toBe('ROOT_DEPARTMENT');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('department.update')).toHaveLength(0);
   });
 
@@ -249,7 +249,7 @@ describe('запись оргструктуры', () => {
       expectedStateHash: fresh,
       idempotencyKey: randomUUID(),
     };
-    const raceOp = approve(await call('company_department_update', args));
+    const raceOp = await approve(await call('company_department_update', args));
     (s.departments.get(3) as { NAME: string }).NAME = 'Изменено вручную';
     const raced = await call('company_department_update', { ...args, approvalId: raceOp });
     expect(raced.error?.code).toBe('CONFLICT');
@@ -265,7 +265,7 @@ describe('запись оргструктуры', () => {
       expectedStateHash: cur,
       idempotencyKey: randomUUID(),
     };
-    const opId = approve(await call('company_department_update', okArgs));
+    const opId = await approve(await call('company_department_update', okArgs));
     const done = await call('company_department_update', { ...okArgs, approvalId: opId });
     expect(done.data).toMatchObject({ id: 3, verified: true, replayed: false });
     expect(done.data?.['stateHash']).toMatch(/^[a-f0-9]{64}$/);
@@ -321,7 +321,7 @@ describe('company_department_delete (этап 14)', () => {
     expect(root.error?.details['reason']).toBe('ROOT_DEPARTMENT');
     const missing = await call('company_department_delete', { id: 999, idempotencyKey: randomUUID() });
     expect(missing.error?.code).toBe('NOT_FOUND');
-    expect(t.app.operations.countByStatus()).toEqual({});
+    expect(await t.app.operations.countByStatus()).toEqual({});
     expect(t.bitrix.callsTo('department.delete')).toHaveLength(0);
   });
 
@@ -329,7 +329,7 @@ describe('company_department_delete (этап 14)', () => {
     await restart({ READ_ONLY_MODE: 'false', ENABLE_DESTRUCTIVE_TOOLS: 'true' });
     // гонка: после подтверждения в отдел 4 добавили сотрудника
     const raceArgs = { id: 4, idempotencyKey: randomUUID() };
-    const raceOp = approve(await call('company_department_delete', raceArgs));
+    const raceOp = await approve(await call('company_department_delete', raceArgs));
     s.users.set(300, user(300, 'Новый', 'Сотрудник', [4]));
     const raced = await call('company_department_delete', { ...raceArgs, approvalId: raceOp });
     expect(raced.error?.details['reason']).toBe('DEPARTMENT_NOT_EMPTY');
@@ -345,7 +345,7 @@ describe('company_department_delete (этап 14)', () => {
       target: 'department:4',
       details: { department: { id: 4, name: 'Пустой отдел' }, impact: { childDepartments: 0, members: 0 } },
     });
-    const operationId = approve(prep);
+    const operationId = await approve(prep);
     const done = await call('company_department_delete', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ id: 4, deleted: true, verified: true, replayed: false });
     expect(t.bitrix.callsTo('department.delete')[0]?.body).toEqual({ ID: 4 });
@@ -387,7 +387,7 @@ describe('company_employee_departments_set', () => {
       expectedStateHash: dry.data?.['stateHash'] as string,
       idempotencyKey: randomUUID(),
     };
-    const operationId = approve(await call('company_employee_departments_set', args));
+    const operationId = await approve(await call('company_employee_departments_set', args));
     const done = await call('company_employee_departments_set', { ...args, approvalId: operationId });
     expect(done.data).toMatchObject({ userId: 10, departmentIds: [3, 4], verified: true, replayed: false });
     expect(t.bitrix.callsTo('user.update')[0]?.body).toEqual({ ID: 10, UF_DEPARTMENT: [3, 4] });
