@@ -25,6 +25,8 @@ export interface FakeWriteHooks {
   failPerformWith?: AppError | undefined;
   failPrecheckWith?: AppError | undefined;
   failVerify?: boolean;
+  /** Детали плана, «прочитанные с портала»: смена между подготовкой и выполнением имитирует гонку. */
+  portalState?: Record<string, unknown>;
 }
 
 export function makeFakeCreateTool(hooks: FakeWriteHooks): ToolDefinition {
@@ -57,7 +59,7 @@ export function makeFakeCreateTool(hooks: FakeWriteHooks): ToolDefinition {
           action: 'Создать тестовую сделку',
           target: 'crm.deal',
           portalOrigin: ctx.bitrix.auth.portalOrigin,
-          details: { TITLE: args.title },
+          details: { TITLE: args.title, ...(hooks.portalState ?? {}) },
           risks: ['Могут сработать роботы стадии NEW'],
         },
         validationLevel: 'local',

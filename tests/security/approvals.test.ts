@@ -207,6 +207,26 @@ describe('подтверждения (ТЗ §8.2)', () => {
     expect(hooks.performCalls).toBe(0);
   });
 
+  it('§8.2 п.4: план при выполнении отличается от подтверждённого (портал изменился, expectedStateHash нет) → CONFLICT PLAN_CHANGED, записи нет', async () => {
+    hooks.portalState = { mode: 'create' };
+    const key = randomUUID();
+    const prep = await call({ title: 'x', idempotencyKey: key });
+    const operationId = opId(prep);
+    t.app.approvals.approve(operationId, t.app.principal.id, t.app.auth.portalKey);
+    hooks.portalState = { mode: 'update', priceId: 5 };
+    const env = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
+    expect(errorOf(env)?.code).toBe('CONFLICT');
+    expect(errorOf(env)?.details['reason']).toBe('PLAN_CHANGED');
+    expect(hooks.performCalls).toBe(0);
+    expect(t.bitrix.callsTo('crm.deal.add')).toHaveLength(0);
+    expect(t.app.operations.view(operationId, 'owner', t.app.auth.portalKey)?.status).toBe('failed');
+    // состояние вернулось — старое подтверждение всё равно мертво, нужен новый план
+    hooks.portalState = { mode: 'create' };
+    const retry = await call({ title: 'x', idempotencyKey: key, approvalId: operationId });
+    expect(errorOf(retry)?.code).toBe('CONFLICT');
+    expect(hooks.performCalls).toBe(0);
+  });
+
   it('потеря ответа при записи → OPERATION_OUTCOME_UNKNOWN, статус unknown, повтор не создаёт дубль', async () => {
     t.bitrix.on('crm.deal.add', { networkError: 'socket hang up' });
     const key = randomUUID();

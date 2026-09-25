@@ -220,11 +220,6 @@ export const companyDepartmentUpdateTool = defineTool({
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const risks: string[] = [];
     const { patch } = args;
-    // В запрос уходят все поля patch (одинаково при подготовке и выполнении); в diff — только отличающиеся.
-    const params: JsonObject = { ID: args.id };
-    if (patch.name !== undefined) params['NAME'] = patch.name;
-    if (patch.parentId !== undefined) params['PARENT'] = patch.parentId;
-    if (patch.headId !== undefined) params['UF_HEAD'] = patch.headId;
     if (patch.name !== undefined && patch.name !== current.name) {
       changes['name'] = { from: current.name, to: patch.name };
       risks.push('Новое название увидят все сотрудники в структуре, профилях и чатах отдела');
@@ -272,6 +267,12 @@ export const companyDepartmentUpdateTool = defineTool({
       );
     const changedFields = Object.keys(patch);
 
+    // В запрос уходят только поля из diff плана: неизменившееся значение patch не должно «откатить»
+    // параллельную правку, которой нет в подтверждённом плане.
+    const params: JsonObject = { ID: args.id };
+    if (changes['name']) params['NAME'] = patch.name ?? null;
+    if (changes['parent']) params['PARENT'] = patch.parentId ?? null;
+    if (changes['head']) params['UF_HEAD'] = patch.headId ?? null;
     const outcome = await ctx.mutations.execute({
       requestId: ctx.requestId,
       principal: mutationPrincipal(ctx),

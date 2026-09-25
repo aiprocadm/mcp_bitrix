@@ -9,6 +9,13 @@ import { D, DOCS, type MethodDescriptor, type OperationKind, type PaginationKind
 const RQ = `${DOCS}/api-reference/crm/requisites`;
 const ACT = `${DOCS}/api-reference/crm/timeline/activities`;
 
+const RAW_DENIED = new Set([
+  'crm.requisite.list',
+  'crm.requisite.get',
+  'crm.address.list',
+  'crm.requisite.bankdetail.get',
+]);
+
 function crm(
   method: string,
   operation: OperationKind,
@@ -23,8 +30,9 @@ function crm(
     pagination,
     supportsNativeIdempotency: false,
     applicationContextRequired: false,
-    // Чтения справочников/реквизитов безопасны для raw; записи — только через именованные инструменты.
-    rawCallable: operation === 'read',
+    // Raw — только справочники и схемы полей. Сами реквизиты, адреса и банковские данные содержат паспортные
+    // и платёжные поля (RQ_IDENT_*, счета) — их отдают только именованные инструменты с фильтрацией (§8.4).
+    rawCallable: operation === 'read' && !RAW_DENIED.has(method),
     source,
   });
 }

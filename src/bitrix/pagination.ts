@@ -66,6 +66,16 @@ export class CursorStore {
 
   /** Загружает и удаляет курсор (одноразовый). Несовпадение привязки — ошибка без чтения состояния. */
   consume<T>(id: string, binding: CursorBinding): T {
+    const state = this.peek<T>(id, binding);
+    this.discard(id);
+    return state;
+  }
+
+  /**
+   * Загружает курсор, не расходуя его: страница читается до удаления, чтобы временная ошибка портала
+   * не лишала продолжения. После успешной загрузки вызывающий обязан вызвать discard().
+   */
+  peek<T>(id: string, binding: CursorBinding): T {
     const row = this.db.get<{
       principal_id: string;
       portal_key: string;
@@ -95,9 +105,15 @@ export class CursorStore {
     ) {
       throw invalid();
     }
-    this.db.run('DELETE FROM cursors WHERE id = ?', id);
-    if (Date.parse(row.expires_at) < Date.now()) throw invalid();
+    if (Date.parse(row.expires_at) < Date.now()) {
+      this.discard(id);
+      throw invalid();
+    }
     return JSON.parse(this.box.decrypt(row.state_json, id)) as T;
+  }
+
+  discard(id: string): void {
+    this.db.run('DELETE FROM cursors WHERE id = ?', id);
   }
 
   cleanupExpired(): void {
@@ -140,7 +156,7 @@ export async function paginateLegacy(opts: {
 }): Promise<PageResult> {
   const maxCalls = opts.maxUpstreamCalls ?? 2;
   let state: LegacyPageState = opts.cursor
-    ? opts.store.consume<LegacyPageState>(opts.cursor, opts.binding)
+    ? opts.store.peek<LegacyPageState>(opts.cursor, opts.binding)
     : { start: 0, buffer: [] };
   let items: JsonValue[] = [...state.buffer];
   let upstreamTotal: number | undefined;
@@ -154,6 +170,8 @@ export async function paginateLegacy(opts: {
     state = { start: page.next, buffer: [] };
     if (page.items.length === 0) state = { start: undefined, buffer: [] };
   }
+  // Курсор расходуется только после успешной загрузки: сбой портала выше оставляет его рабочим.
+  if (opts.cursor) opts.store.discard(opts.cursor);
   const pageItems = items.slice(0, opts.pageSize);
   const remainder = items.slice(opts.pageSize);
   const hasMore = remainder.length > 0 || state.start !== undefined;

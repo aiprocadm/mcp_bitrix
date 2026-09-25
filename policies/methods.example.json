@@ -51,10 +51,6 @@
     },
     {
       "apiVersion": "legacy",
-      "method": "disk.folder.getchildren"
-    },
-    {
-      "apiVersion": "legacy",
       "method": "disk.storage.getlist"
     },
     {
@@ -148,10 +144,6 @@
     {
       "apiVersion": "legacy",
       "method": "calendar.meeting.status.get"
-    },
-    {
-      "apiVersion": "legacy",
-      "method": "disk.storage.getchildren"
     },
     {
       "apiVersion": "legacy",

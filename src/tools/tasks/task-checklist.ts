@@ -262,6 +262,18 @@ export const taskChecklistAddTool = defineTool({
         risks: ['Участники задачи увидят новый пункт; изменение попадёт в историю задачи'],
       },
       validationLevel: 'local',
+      precheck: async () => {
+        // Родитель мог исчезнуть после чтения: тогда портал молча создал бы новый чек-лист вместо пункта.
+        if (!parent) return;
+        const fresh = await listChecklist(ctx, args.taskId);
+        if (!fresh.some((i) => i.id === parent.id)) {
+          throw new AppError('CONFLICT', 'Родительский пункт удалён после подтверждения; пункт не добавлен', {
+            field: 'parentId',
+            reason: 'PARENT_NOT_FOUND',
+            nextAction: 'Прочитайте чек-лист (task_checklist_get) и подготовьте новый план',
+          });
+        }
+      },
       perform: async () => {
         const r = await ctx.bitrix.call(
           'legacy',

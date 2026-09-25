@@ -7,7 +7,7 @@
  */
 import type { JsonObject, JsonValue } from '../../bitrix/legacy-adapter.js';
 import { AppError } from '../../errors/app-error.js';
-import { asText, isObj } from '../shared.js';
+import { asText, isObj, own } from '../shared.js';
 import type { FieldMeta } from './deal-fields.js';
 
 export type ItemFieldsMeta = Record<string, FieldMeta>;
@@ -145,7 +145,7 @@ export function validateItemFieldsForWrite(
   if (keys.length > 200)
     throw new AppError('VALIDATION_ERROR', 'слишком много полей (>200)', { field: 'fields' });
   for (const key of keys) {
-    const f = meta[key];
+    const f = own(meta, key);
     if (!f) {
       throw bad(
         key,
@@ -207,7 +207,7 @@ export function validateItemFilter(filter: Record<string, unknown>, meta: ItemFi
       );
     const prefix = m[1] ?? '';
     const field = m[2] ?? '';
-    if (!meta[field]) throw bad(`filter.${field}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field)) throw bad(`filter.${field}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     if (LIST_PREFIXES.has(prefix)) {
       if (!Array.isArray(value) || value.length === 0 || value.length > 100 || !value.every(isScalar)) {
         throw bad(`filter.${key}`, 'ожидается непустой массив скалярных значений (до 100)');
@@ -234,7 +234,8 @@ export function validateItemOrder(
 ): Record<string, 'ASC' | 'DESC'> {
   const out: Record<string, 'ASC' | 'DESC'> = {};
   for (const [field, dir] of Object.entries(order)) {
-    if (!meta[field]) throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field))
+      throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     const d = String(dir).toUpperCase();
     if (d !== 'ASC' && d !== 'DESC') throw bad(`order.${field}`, 'допустимо ASC или DESC');
     out[field] = d;
@@ -247,7 +248,7 @@ export function validateItemSelect(select: string[], meta: ItemFieldsMeta): stri
     throw new AppError('VALIDATION_ERROR', 'select: больше 100 полей', { field: 'select' });
   for (const s of select) {
     if (s === '*') continue;
-    if (!meta[s]) throw bad(`select.${s.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, s)) throw bad(`select.${s.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
   }
   return select;
 }

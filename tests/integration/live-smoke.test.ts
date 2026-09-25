@@ -8,8 +8,11 @@ import {
   buildWritePlans,
   executeWrites,
   prepareWrites,
+  moduleReadChecks,
   runReadOnly,
+  type StepResult,
 } from '../../src/live/scenario.js';
+import { allTools } from '../../src/tools/index.js';
 import { createTestApp, testConfig, type TestApp } from '../helpers/app.js';
 import {
   DEAL_FIELDS,
@@ -141,7 +144,14 @@ describe('live-smoke (§10.3) на mock', () => {
   it('read-only: шесть шагов §10.3 п.2–3 проходят, записи нет', async () => {
     portal();
     const steps = await runReadOnly(t.app);
-    expect(steps.map((s) => s.status)).toEqual(['passed', 'passed', 'passed', 'passed', 'passed', 'passed']);
+    expect(steps.slice(0, 6).map((s) => s.status)).toEqual([
+      'passed',
+      'passed',
+      'passed',
+      'passed',
+      'passed',
+      'passed',
+    ]);
     expect(steps[3]?.detail).toContain('получено 5');
     expect(steps[4]?.ids).toEqual({ dealId: 1 });
     for (const m of [
@@ -152,6 +162,46 @@ describe('live-smoke (§10.3) на mock', () => {
       'calendar.event.add',
     ])
       expect(t.bitrix.callsTo(m)).toHaveLength(0);
+  });
+
+  it('проверки модулей полной версии: аргументы проходят схемы инструментов, модуль совпадает, только чтение', () => {
+    portal();
+    const checks = moduleReadChecks(7, new Date('2030-01-10T12:00:00Z'));
+    expect(new Set(checks.map((c) => c.module)).size).toBeGreaterThanOrEqual(12);
+    for (const c of checks) {
+      const def = allTools().find((d) => d.name === c.tool);
+      expect(def, c.tool).toBeDefined();
+      expect(def?.module).toBe(c.module);
+      expect(def?.operation).toBe('read');
+      expect(def?.inputSchema.safeParse(c.args).success, c.tool).toBe(true);
+    }
+    expect(moduleReadChecks(0).some((c) => c.tool === 'calendar_list')).toBe(false);
+  });
+
+  it('read-only по модулям: только включённые модули; отсутствие модуля/scope → blocked, успех → passed, без записей', async () => {
+    portal({ ENABLED_MODULES: 'system,crm,tasks,chat,disk,calendar,company' });
+    t.bitrix
+      .on('department.get', legacyOk([{ ID: '1', NAME: 'Компания', SORT: 500 }], { total: 1 }))
+      .on('disk.storage.getlist', { status: 401, body: { error: 'insufficient_scope' } });
+    const steps = (await runReadOnly(t.app)).slice(6);
+    const byTool: Record<string, StepResult | undefined> = Object.fromEntries(
+      steps.map((s) => [s.step.split(' ')[1] ?? '', s]),
+    );
+    expect(Object.keys(byTool).sort()).toEqual([
+      'calendar_list',
+      'chat_recent_list',
+      'company_departments_list',
+      'crm_list_records',
+      'crm_stages_and_statuses',
+      'disk_storages_list',
+    ]);
+    expect(byTool['company_departments_list']?.status).toBe('passed');
+    expect(byTool['disk_storages_list']?.status).toBe('blocked');
+    expect(byTool['chat_recent_list']?.status).toBe('blocked');
+    const writes = t.bitrix.calls.filter((c) =>
+      /\.(add|update|delete|set|send|markdeleted)(\.json)?$/.test(c.url),
+    );
+    expect(writes).toHaveLength(0);
   });
 
   it('read-only: недоступный метод MVP помечает шаг capabilities как blocked', async () => {

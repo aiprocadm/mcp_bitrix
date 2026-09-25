@@ -22,6 +22,7 @@ import {
   legacyListPage,
   num,
   outcomeUnknown,
+  own,
   upstreamShapeError,
   yn,
 } from '../shared.js';
@@ -211,7 +212,7 @@ export function defaultItemSelect(target: ItemTarget, meta: ItemFieldsMeta): str
     'createdTime',
     'updatedTime',
   ];
-  return base.filter((f) => meta[f] !== undefined);
+  return base.filter((f) => own(meta, f) !== undefined);
 }
 
 // ---------- чтение ----------

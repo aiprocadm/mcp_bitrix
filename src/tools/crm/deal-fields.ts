@@ -6,6 +6,7 @@
  */
 import { AppError } from '../../errors/app-error.js';
 import type { JsonObject, JsonValue } from '../../bitrix/legacy-adapter.js';
+import { own } from '../shared.js';
 
 export interface FieldMeta {
   name: string;
@@ -161,7 +162,7 @@ export function validateFieldsForWrite(
   if (keys.length > 200)
     throw new AppError('VALIDATION_ERROR', 'слишком много полей (>200)', { field: 'fields' });
   for (const key of keys) {
-    const f = meta[key];
+    const f = own(meta, key);
     if (!f)
       throw bad(
         key,
@@ -221,7 +222,7 @@ export function validateFilter(filter: Record<string, unknown>, meta: DealFields
       );
     const prefix = m[1] ?? '';
     const field = m[2] ?? '';
-    if (!meta[field]) throw bad(`filter.${field}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field)) throw bad(`filter.${field}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     if (RANGE_PREFIXES.has(prefix)) {
       if (!Array.isArray(value) || value.length !== 2 || !value.every(isScalar)) {
         throw bad(`filter.${key}`, 'диапазон: ожидается массив ровно из двух значений [от, до]');
@@ -255,7 +256,8 @@ export function validateOrder(
 ): Record<string, 'ASC' | 'DESC'> {
   const out: Record<string, 'ASC' | 'DESC'> = {};
   for (const [field, dir] of Object.entries(order)) {
-    if (!meta[field]) throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, field))
+      throw bad(`order.${field.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
     const d = String(dir).toUpperCase();
     if (d !== 'ASC' && d !== 'DESC') throw bad(`order.${field}`, 'допустимо ASC или DESC');
     out[field] = d;
@@ -268,7 +270,7 @@ export function validateSelect(select: string[], meta: DealFieldsMeta): string[]
     throw new AppError('VALIDATION_ERROR', 'select: больше 100 полей', { field: 'select' });
   for (const s of select) {
     if (s === '*' || s === 'UF_*') continue;
-    if (!meta[s]) throw bad(`select.${s.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
+    if (!own(meta, s)) throw bad(`select.${s.slice(0, 40)}`, 'поле неизвестно порталу', 'UNKNOWN_FIELD');
   }
   return select;
 }

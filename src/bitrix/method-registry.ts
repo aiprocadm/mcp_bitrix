@@ -492,7 +492,8 @@ const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
     pagination: 'offset',
     supportsNativeIdempotency: false,
     applicationContextRequired: false,
-    rawCallable: true,
+    // Ответ содержит DOWNLOAD_URL со временным токеном доступа — только через именованный инструмент (§8.3, §8.5)
+    rawCallable: false,
     source: `${DOCS}/api-reference/disk/folder/disk-folder-get-children.html`,
   }),
   D({

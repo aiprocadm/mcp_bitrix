@@ -78,8 +78,11 @@ export const REQUISITE_DEFAULT_SELECT = [
   'DATE_MODIFY',
 ] as const;
 
-/** Персональные идентификаторы и документы: не читаются и не выдаются этим сервером (§8.4). */
-export const REQUISITE_SENSITIVE_FIELD = /^RQ_(IDENT_|PESEL$|CPF$|DRFO$)/;
+/**
+ * Персональные идентификаторы, документы и контакты физлица (ИИН, телефон, e-mail):
+ * не читаются, не выдаются и не записываются этим сервером (§8.4).
+ */
+export const REQUISITE_SENSITIVE_FIELD = /^RQ_(IDENT_|PESEL$|CPF$|DRFO$|IIN$|PHONE$|EMAIL$)/;
 
 export async function requisitesPage(
   ctx: ToolContext,
