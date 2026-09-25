@@ -52,6 +52,8 @@ describe('MCP через InMemoryTransport (T41)', () => {
       'crm_get_record',
       'crm_list_records',
       'crm_pipeline_summary',
+      'crm_requisite_presets_list',
+      'crm_requisites_list',
       'crm_search_records',
       'crm_stage_history',
       'crm_stages_and_statuses',
