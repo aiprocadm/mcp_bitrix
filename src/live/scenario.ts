@@ -94,6 +94,29 @@ function err(env: Envelope): { code: string; message: string; details: Record<st
 
 const MVP_MODULES = ['system', 'crm', 'tasks', 'chat', 'disk', 'calendar'];
 
+/** Методы 11 инструментов MVP (§10.1) и их обязательных чтений: только их проверяет шаг 3. */
+const MVP_METHODS = [
+  'profile',
+  'crm.deal.list',
+  'crm.deal.get',
+  'crm.deal.fields',
+  'crm.deal.add',
+  'crm.category.list',
+  'crm.status.list',
+  'tasks.task.getfields',
+  'tasks.task.add',
+  'tasks.task.get',
+  'tasks.task.list',
+  'im.message.add',
+  'im.dialog.get',
+  'disk.folder.get',
+  'disk.folder.uploadfile',
+  'disk.file.get',
+  'calendar.section.get',
+  'calendar.event.add',
+  'calendar.event.getbyid',
+];
+
 export async function runReadOnly(app: AppContainer): Promise<StepResult[]> {
   const steps: StepResult[] = [];
   const push = (
@@ -125,7 +148,7 @@ export async function runReadOnly(app: AppContainer): Promise<StepResult[]> {
     (d) => `ID=${String((d['result'] as Record<string, unknown>)['ID'])}`,
   );
 
-  const caps = await run(app, 'bitrix_capabilities', { refresh: true });
+  const caps = await run(app, 'bitrix_capabilities', { refresh: true, methods: MVP_METHODS });
   if (caps.success) {
     const items = (
       caps.data as { items: { method: string; status: string; reason?: string }[] }

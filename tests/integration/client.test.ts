@@ -75,7 +75,7 @@ describe('BitrixClient (ТЗ §14)', () => {
   it('метод вне реестра → METHOD_NOT_ALLOWED без обращения к сети', async () => {
     const mock = new MockBitrix();
     const { client } = makeClient(mock);
-    const err = await catchApp(client.call('legacy', 'crm.deal.delete', { id: 1 }));
+    const err = await catchApp(client.call('legacy', 'crm.deal.contact.items.delete', { id: 1 }));
     expect(err.code).toBe('METHOD_NOT_ALLOWED');
     expect(mock.calls).toHaveLength(0);
   });

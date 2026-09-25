@@ -1,20 +1,229 @@
 {
-  "version": "2026-09-23",
+  "version": "2026-09-25",
   "rawAllowlist": [
-    { "apiVersion": "legacy", "method": "profile" },
-    { "apiVersion": "legacy", "method": "user.current" },
-    { "apiVersion": "legacy", "method": "method.get" },
-    { "apiVersion": "legacy", "method": "scope" },
-    { "apiVersion": "legacy", "method": "crm.deal.list" },
-    { "apiVersion": "legacy", "method": "crm.deal.get" },
-    { "apiVersion": "legacy", "method": "crm.deal.fields" },
-    { "apiVersion": "legacy", "method": "crm.category.list" },
-    { "apiVersion": "legacy", "method": "crm.status.list" },
-    { "apiVersion": "legacy", "method": "tasks.task.list" },
-    { "apiVersion": "legacy", "method": "tasks.task.get" },
-    { "apiVersion": "legacy", "method": "calendar.section.get" },
-    { "apiVersion": "legacy", "method": "disk.folder.getchildren" },
-    { "apiVersion": "legacy", "method": "disk.storage.getlist" },
-    { "apiVersion": "legacy", "method": "im.recent.list" }
+    {
+      "apiVersion": "legacy",
+      "method": "profile"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "user.current"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "method.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "scope"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.deal.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.deal.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.deal.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.category.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.status.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "tasks.task.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "tasks.task.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "calendar.section.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "disk.folder.getchildren"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "disk.storage.getlist"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "im.recent.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.lead.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.lead.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.lead.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.contact.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.company.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.status.entity.types"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.stagehistory.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.deal.userfield.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.lead.userfield.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.contact.userfield.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.company.userfield.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.item.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.type.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.requisite.preset.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.requisite.preset.field.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.enum.addresstype"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.requisite.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.requisite.bankdetail.fields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.currency.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "tasks.task.getfields"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "task.checklistitem.getlist"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "calendar.meeting.status.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "disk.storage.getchildren"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "department.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "im.counters.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "sonet_group.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "sonet_group.user.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.catalog.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.product.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.product.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.product.getfieldsbyfilter"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.price.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.pricetype.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "catalog.storeproduct.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "landing.site.getlist"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "landing.landing.getlist"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "landing.block.getrepository"
+    },
+    {
+      "apiVersion": "v3",
+      "method": "tasks.task.get"
+    },
+    {
+      "apiVersion": "v3",
+      "method": "note.collection.list"
+    },
+    {
+      "apiVersion": "v3",
+      "method": "note.collection.get"
+    },
+    {
+      "apiVersion": "v3",
+      "method": "note.document.tree.list"
+    }
   ]
 }

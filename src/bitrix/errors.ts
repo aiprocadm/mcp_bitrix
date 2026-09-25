@@ -52,7 +52,13 @@ export function mapUpstreamError(
   const code = up.upstreamCode ?? '';
   let mapped: ErrorCode | undefined = EXACT[code];
   if (!mapped) {
-    if (/NOT_FOUND/i.test(code)) mapped = 'NOT_FOUND';
+    // Каталог (catalog.*): числовые коды 2000403000xx — 00 «инфоблок не найден», 10..59 — нет прав.
+    if (code === '200040300000') mapped = 'NOT_FOUND';
+    else if (/^2000403000[1-5]\d$/.test(code)) mapped = 'BITRIX_ACCESS_DENIED';
+  }
+  if (!mapped) {
+    // REST 3.0: BITRIX_REST_V3_EXCEPTION_ENTITYNOTFOUNDEXCEPTION и т. п.
+    if (/NOT_?FOUND/i.test(code)) mapped = 'NOT_FOUND';
     else if (/ACCESS|PERMISSION|DENIED/i.test(code)) mapped = 'BITRIX_ACCESS_DENIED';
     else if (/SCOPE/i.test(code)) mapped = 'BITRIX_SCOPE_MISSING';
     else if (/LIMIT/i.test(code)) mapped = 'BITRIX_RATE_LIMITED';

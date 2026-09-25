@@ -158,7 +158,7 @@ describe('чтение лидов, контактов, компаний', () => 
     expect(company.meta['method']).toBe('crm.company.fields');
     await call('crm_fields_get', { entityType: 'lead' });
     expect(t.bitrix.callsTo('crm.lead.fields')).toHaveLength(1);
-    const bad = await client.callTool({ name: 'crm_fields_get', arguments: { entityType: 'invoice' } });
+    const bad = await client.callTool({ name: 'crm_fields_get', arguments: { entityType: 'quote' } });
     expect(bad.isError).toBe(true);
   });
 

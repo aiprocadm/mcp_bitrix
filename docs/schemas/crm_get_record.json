@@ -1,7 +1,7 @@
 {
   "name": "crm_get_record",
   "title": "Карточка записи CRM",
-  "description": "Карточка записи CRM (сделка, лид, контакт, компания) по ID в рамках доступных полей. Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для последующих изменений (expectedStateHash в crm_update_record). Связанные блоки (дела, комментарии, товары, реквизиты) через include появятся следующими срезами; бинарные вложения не скачиваются.",
+  "description": "Карточка записи CRM по ID в рамках доступных полей: сделка, лид, контакт, компания (crm.<entity>.get, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.get (поля camelCase). Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для expectedStateHash в crm_update_record/crm_delete_record. include добавляет небольшие связанные блоки (дела, комментарии, товары) с отдельными лимитами и полнотой; бинарные вложения не скачиваются.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -18,9 +18,17 @@
           "deal",
           "lead",
           "contact",
-          "company"
+          "company",
+          "smart",
+          "invoice"
         ],
-        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+      },
+      "entityTypeId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 1000000,
+        "description": "Только для entityType=smart: entityTypeId смарт-процесса из smart_process_types_list (не id типа crm.type)"
       },
       "id": {
         "type": "integer",
@@ -35,6 +43,19 @@
         "items": {
           "type": "string",
           "maxLength": 100
+        }
+      },
+      "include": {
+        "description": "Связанные блоки, каждый со своим лимитом и completeness: activities (до 10 дел), comments (до 10 комментариев таймлайна, только классические сущности), products (до 20 товарных позиций: сделка, лид, smart, invoice). Полные списки — отдельные инструменты",
+        "maxItems": 3,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "activities",
+            "comments",
+            "products"
+          ]
         }
       }
     },
@@ -63,9 +84,14 @@
                   "deal",
                   "lead",
                   "contact",
-                  "company"
+                  "company",
+                  "smart",
+                  "invoice"
                 ],
-                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+              },
+              "entityTypeId": {
+                "type": "number"
               },
               "id": {
                 "type": "number"
@@ -82,6 +108,49 @@
               },
               "stateHash": {
                 "type": "string"
+              },
+              "related": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "returnedCount": {
+                      "type": "number"
+                    },
+                    "completeness": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "partial",
+                        "unknown"
+                      ]
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "returnedCount",
+                    "completeness",
+                    "hasMore",
+                    "method"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [

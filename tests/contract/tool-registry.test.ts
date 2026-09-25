@@ -54,6 +54,36 @@ describe('envelope и лимит ответа (ТЗ §14.3–14.4)', () => {
     }
   });
 
+  it('APPROVAL_REQUIRED с огромным планом сохраняет operationId и срок, план — только заголовок', () => {
+    const env = enforceResponseLimit(
+      fail(
+        new AppError('APPROVAL_REQUIRED', 'нужно подтверждение', {
+          operationId: '11111111-1111-4111-8111-111111111111',
+          expiresAt: '2026-09-25T10:00:00.000Z',
+          plan: {
+            action: 'Обновить документ',
+            target: 'note.document:1',
+            details: { text: 'z'.repeat(100_000) },
+          },
+        }),
+        { requestId: 'r', durationMs: 1 },
+      ),
+      5000,
+    );
+    expect(env.success).toBe(false);
+    if (!env.success) {
+      expect(env.error.code).toBe('APPROVAL_REQUIRED');
+      expect(env.error.details['operationId']).toBe('11111111-1111-4111-8111-111111111111');
+      expect(env.error.details['expiresAt']).toBe('2026-09-25T10:00:00.000Z');
+      expect(env.error.details['plan']).toEqual({
+        action: 'Обновить документ',
+        target: 'note.document:1',
+        truncated: true,
+      });
+      expect(Buffer.byteLength(JSON.stringify(env))).toBeLessThanOrEqual(5000);
+    }
+  });
+
   it('одиночное большое поле без items → понятная ошибка вместо обрезанного JSON', () => {
     const env = enforceResponseLimit(
       ok({ text: 'y'.repeat(10_000) }, { requestId: 'r', durationMs: 1 }),

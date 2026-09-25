@@ -11,6 +11,7 @@ import { ok } from '../../mcp/result.js';
 import { requireIdempotencyUnlessDryRun, writeArgsShape } from '../../schemas/common.js';
 import { CREATE_ANNOTATIONS, defineTool, type ToolContext } from '../types.js';
 import { asText } from '../crm/deal-fields.js';
+import { calendarRef } from './common.js';
 import {
   assertTimeZone,
   bitrixDateTimeToUnix,
@@ -121,11 +122,13 @@ export const calendarCreateEventTool = defineTool({
       toText = `${unixToZoned(toTs, timezone)} (${timezone})`;
     }
     const attendees = [...new Set(args.attendeeIds ?? [])];
-    const sectionName = await assertSection(ctx, args.type, args.ownerId, args.sectionId);
+    // Документированный тип общего календаря — company_calendar с ownerId=0.
+    const ref = calendarRef(args.type, args.ownerId);
+    const sectionName = await assertSection(ctx, ref.type, ref.ownerId, args.sectionId);
 
     const fields: JsonObject = {
-      type: args.type,
-      ownerId: args.ownerId,
+      type: ref.type,
+      ownerId: ref.ownerId,
       section: args.sectionId,
       name: args.name,
       from_ts: fromTs,

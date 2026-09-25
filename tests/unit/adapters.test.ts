@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { WebhookAuthProvider } from '../../src/auth/webhook-provider.js';
 import { mapUpstreamError } from '../../src/bitrix/errors.js';
@@ -76,6 +77,24 @@ describe('адаптеры legacy / v3 (T03, ТЗ §14.1)', () => {
     expect(JSON.stringify(err)).not.toContain('error_description');
   });
 
+  it('legacy: числовой код ошибки каталога → BITRIX_ACCESS_DENIED, описание не утекает', () => {
+    const d = requireMethod('legacy', 'catalog.catalog.list');
+    let caught: unknown;
+    try {
+      parseLegacyResponse(
+        400,
+        JSON.stringify({ error: 200040300010, error_description: 'Access Denied' }),
+        undefined,
+        d,
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect((caught as AppError).code).toBe('BITRIX_ACCESS_DENIED');
+    expect((caught as AppError).details.upstreamCode).toBe('200040300010');
+    expect(JSON.stringify(caught)).not.toContain('Access Denied');
+  });
+
   it('legacy: next/total/time разбираются, отсутствие result — ошибка', () => {
     const d = requireMethod('legacy', 'crm.deal.list');
     const r = parseLegacyResponse(
@@ -134,6 +153,17 @@ describe('реестр методов', () => {
         expect(d.rawCallable).toBe(false);
     }
   });
+
+  it('пример raw allowlist (policies/methods.example.json): только зарегистрированные безопасные чтения', () => {
+    const policy = JSON.parse(readFileSync('policies/methods.example.json', 'utf8')) as {
+      rawAllowlist: { apiVersion: 'legacy' | 'v3'; method: string }[];
+    };
+    for (const e of policy.rawAllowlist) {
+      const d = findMethod(e.apiVersion, e.method);
+      expect(d, `${e.apiVersion}:${e.method}`).toBeDefined();
+      expect(d?.rawCallable, `${e.apiVersion}:${e.method}`).toBe(true);
+    }
+  });
 });
 
 describe('нормализация ошибок (ТЗ §14.5)', () => {
@@ -148,6 +178,10 @@ describe('нормализация ошибок (ТЗ §14.5)', () => {
     ['ERROR_NOT_FOUND', 400, 'NOT_FOUND'],
     ['ERROR_ARGUMENT', 400, 'VALIDATION_ERROR'],
     ['SOMETHING_WEIRD', 500, 'BITRIX_UPSTREAM_ERROR'],
+    ['BITRIX_REST_V3_EXCEPTION_ENTITYNOTFOUNDEXCEPTION', 400, 'NOT_FOUND'],
+    ['200040300010', 400, 'BITRIX_ACCESS_DENIED'],
+    ['200040300050', 400, 'BITRIX_ACCESS_DENIED'],
+    ['200040300000', 400, 'NOT_FOUND'],
   ];
   it.each(cases)('%s / HTTP %d → %s', (code, status, expected) => {
     const err = mapUpstreamError(

@@ -1,0 +1,371 @@
+{
+  "name": "calendar_list_events",
+  "title": "События календаря за период",
+  "description": "События календаря Bitrix24 за период (calendar.event.get): название, начало/конец со смещением зоны, весь день, участники и их ответы, повторяемость. Использовать, когда спрашивают «что у меня/у сотрудника в календаре на неделе», «какие встречи в группе». from/to — обе даты YYYY-MM-DD (включительно) либо обе ISO с явным смещением; период не длиннее 93 дней; to позже from. sectionIds сужает до выбранных календарей (calendar_list). Повторяющиеся события показываются вхождениями с recurring=true. Страница до 50 событий, продолжение — по cursor (снимок на момент первого запроса).",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": [
+          "user",
+          "group",
+          "company"
+        ],
+        "description": "user — календарь сотрудника, group — рабочей группы, company — общий календарь компании"
+      },
+      "ownerId": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID сотрудника (user) или группы (group); для company игнорируется (0)"
+      },
+      "from": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 40,
+        "description": "Начало: дата YYYY-MM-DD (в зоне timezone) либо ISO с явным смещением 2026-10-01T09:00:00+03:00"
+      },
+      "to": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 40,
+        "description": "Конец: YYYY-MM-DD включительно либо ISO с явным смещением (должно быть позже from)"
+      },
+      "timezone": {
+        "description": "IANA-зона для дат без времени и для показа результата; по умолчанию зона портала из конфигурации",
+        "type": "string",
+        "maxLength": 64
+      },
+      "sectionIds": {
+        "minItems": 1,
+        "maxItems": 20,
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "pageSize": {
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "type",
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "number"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "allDay": {
+                      "type": "boolean"
+                    },
+                    "eventTimezone": {
+                      "type": "string"
+                    },
+                    "sectionId": {
+                      "type": "number"
+                    },
+                    "recurring": {
+                      "type": "boolean"
+                    },
+                    "recurrence": {
+                      "type": "string"
+                    },
+                    "isMeeting": {
+                      "type": "boolean"
+                    },
+                    "hostId": {
+                      "type": "number"
+                    },
+                    "myStatus": {
+                      "type": "string"
+                    },
+                    "attendees": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "accessibility": {
+                      "type": "string"
+                    },
+                    "importance": {
+                      "type": "string"
+                    },
+                    "private": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "from",
+                    "to",
+                    "allDay",
+                    "recurring",
+                    "isMeeting",
+                    "attendees",
+                    "private"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "returnedCount": {
+                "type": "number"
+              },
+              "totalInSnapshot": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "ownerId",
+              "timezone",
+              "items",
+              "returnedCount",
+              "totalInSnapshot"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

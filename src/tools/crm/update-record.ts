@@ -10,7 +10,7 @@ import { ok } from '../../mcp/result.js';
 import { requireIdempotencyUnlessDryRun, updateArgsShape } from '../../schemas/common.js';
 import { defineTool, UPDATE_ANNOTATIONS } from '../types.js';
 import { validateFieldsForWrite } from './deal-fields.js';
-import { classicEntity, entityTypeSchema, recordTitle, type ClassicEntity } from './entities.js';
+import { recordTitle, type ClassicEntity } from './entities.js';
 import {
   assertStageValid,
   compareFields,
@@ -21,6 +21,12 @@ import {
   type CrmRecord,
 } from './crm-service.js';
 import { crmFieldsSchema } from './create-record.js';
+import {
+  entityTypeIdSchema,
+  itemUpdateEnvelope,
+  recordEntityTypeSchema,
+  resolveRecordTarget,
+} from './item-ops.js';
 
 function updateRisks(entity: ClassicEntity, fields: Record<string, unknown>, current: CrmRecord): string[] {
   const risks = ['Могут сработать роботы/бизнес-процессы и уведомления об изменении'];
@@ -45,7 +51,8 @@ export const crmUpdateRecordTool = defineTool({
   module: 'crm',
   title: 'Изменить запись CRM',
   description:
-    'Изменить поля записи классического CRM (сделка, лид, контакт, компания) через crm.<entity>.update. ' +
+    'Изменить поля записи CRM: сделка, лид, контакт, компания (crm.<entity>.update, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса ' +
+    '(entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.update (поля camelCase). ' +
     'Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. ' +
     'Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. ' +
     'Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом ' +
@@ -55,7 +62,8 @@ export const crmUpdateRecordTool = defineTool({
   requiresBitrix: true,
   inputSchema: z
     .object({
-      entityType: entityTypeSchema,
+      entityType: recordEntityTypeSchema,
+      entityTypeId: entityTypeIdSchema.optional(),
       id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).describe('ID записи'),
       fields: crmFieldsSchema,
       ...updateArgsShape,
@@ -63,7 +71,8 @@ export const crmUpdateRecordTool = defineTool({
     .strict()
     .superRefine(requireIdempotencyUnlessDryRun),
   outputDataSchema: z.object({
-    entityType: entityTypeSchema,
+    entityType: recordEntityTypeSchema,
+    entityTypeId: z.number().optional(),
     id: z.number(),
     dryRun: z.boolean().optional(),
     plan: z.record(z.string(), z.unknown()).optional(),
@@ -75,7 +84,17 @@ export const crmUpdateRecordTool = defineTool({
     stateHash: z.string().optional(),
   }),
   handler: async (args, ctx) => {
-    const entity = classicEntity(args.entityType);
+    const resolved = await resolveRecordTarget(ctx, args.entityType, args.entityTypeId);
+    if (resolved.kind === 'item') {
+      return itemUpdateEnvelope(ctx, resolved.target, {
+        tool: 'crm_update_record',
+        id: args.id,
+        rawFields: args.fields,
+        args,
+        base: { entityType: args.entityType, entityTypeId: resolved.target.entityTypeId },
+      });
+    }
+    const entity: ClassicEntity = resolved.entity;
     const meta = await getFieldsMeta(ctx, entity);
     const fields = validateFieldsForWrite(args.fields, meta, 'update');
     const current = await getRecord(ctx, entity, args.id);
