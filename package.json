@@ -33,6 +33,7 @@
     "file:stage": "tsx src/cli/file-stage.ts",
     "backup": "tsx src/cli/backup.ts",
     "admin:user": "tsx src/cli/admin-user.ts",
+    "owner": "tsx src/cli/owner.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

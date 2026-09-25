@@ -14,6 +14,7 @@ import { S4_MIGRATIONS } from './pg-migrations/s4.js';
 import { S5S9_MIGRATIONS } from './pg-migrations/s5s9.js';
 import { S6S7_MIGRATIONS } from './pg-migrations/s6s7.js';
 import { S8_MIGRATIONS } from './pg-migrations/s8.js';
+import { S9_MIGRATIONS } from './pg-migrations/s9.js';
 
 export interface PgMigration {
   readonly id: number;
@@ -363,6 +364,7 @@ export const PG_MIGRATIONS: readonly PgMigration[] = (() => {
     ...S5S9_MIGRATIONS,
     ...S6S7_MIGRATIONS,
     ...S8_MIGRATIONS,
+    ...S9_MIGRATIONS,
   ].sort((a, b) => a.id - b.id);
   for (let i = 1; i < all.length; i += 1) {
     if (all[i]?.id === all[i - 1]?.id)
