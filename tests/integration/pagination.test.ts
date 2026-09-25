@@ -98,4 +98,32 @@ describe('пагинация (T20, T21, ТЗ §14.3)', () => {
     expect(row?.state_json.startsWith('v1:')).toBe(true);
     expect(row?.state_json).not.toContain('Сделка');
   });
+
+  it('сбой портала при продолжении не расходует курсор: повтор с тем же cursor работает, после успеха — одноразовый', async () => {
+    const { store, binding } = setup();
+    // pageSize 50 = upstream-страница: продолжение требует нового запроса к порталу
+    const all = deals(1, 120);
+    let failNext = false;
+    const flaky = (start: number) => {
+      if (failNext) {
+        failNext = false;
+        return Promise.reject(new AppError('BITRIX_TIMEOUT', 'timeout'));
+      }
+      const page = legacyListPage(all, start, 50) as MockResponse & {
+        body: { result: JsonValue[]; next?: number; total: number };
+      };
+      return Promise.resolve({ items: page.body.result, next: page.body.next, total: page.body.total });
+    };
+    const p1 = await paginateLegacy({ store, binding, cursor: undefined, pageSize: 50, fetchPage: flaky });
+    const cursor = p1.nextCursor ?? undefined;
+    failNext = true;
+    await expect(
+      paginateLegacy({ store, binding, cursor, pageSize: 50, fetchPage: flaky }),
+    ).rejects.toThrow();
+    const p2 = await paginateLegacy({ store, binding, cursor, pageSize: 50, fetchPage: flaky });
+    expect((p2.items[0] as { ID: string }).ID).toBe('51');
+    await expect(paginateLegacy({ store, binding, cursor, pageSize: 50, fetchPage: flaky })).rejects.toThrow(
+      /Курсор недействителен/,
+    );
+  });
 });

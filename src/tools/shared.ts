@@ -60,6 +60,14 @@ export const idOf = (v: unknown): number | undefined => {
   return n !== undefined && Number.isSafeInteger(n) && n > 0 ? n : undefined;
 };
 
+/**
+ * Собственное поле словаря метаданных. Обычный `meta[key]` находит и прототипные ключи
+ * (`constructor`, `toString`) — такое «поле» прошло бы проверку «известно порталу».
+ */
+export function own<T>(obj: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(obj, key) ? obj[key] : undefined;
+}
+
 /** Y/N/true → boolean. */
 export const yn = (v: unknown): boolean => v === true || asText(v).toUpperCase() === 'Y';
 
@@ -168,8 +176,10 @@ export async function statefulPage<S>(
   },
 ): Promise<PageResult> {
   const binding = cursorBinding(ctx, opts.tool, opts.bindingParts);
-  const state = opts.cursor ? ctx.cursors.consume<S>(opts.cursor, binding) : opts.initial;
+  // peek + discard после успеха: временная ошибка портала не лишает продолжения.
+  const state = opts.cursor ? ctx.cursors.peek<S>(opts.cursor, binding) : opts.initial;
   const page = await opts.fetch(state);
+  if (opts.cursor) ctx.cursors.discard(opts.cursor);
   const hasMore = page.next !== undefined;
   return {
     items: page.items,

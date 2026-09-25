@@ -61,7 +61,8 @@ export const feedLandingMethods: readonly (readonly [string, MethodDescriptor])[
     method: 'log.blogcomment.user.get',
     operation: 'read',
     pagination: 'cursor',
-    rawCallable: true,
+    // Ответ содержит прямые ссылки скачивания вложений — только через именованный инструмент (§8.3)
+    rawCallable: false,
     source: `${DOCS}/api-reference/log/blogcomment/log-blogcomment-user-get.html`,
   }),
 

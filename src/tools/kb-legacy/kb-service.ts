@@ -342,7 +342,7 @@ export async function assertBlockCode(
   const r = await call(ctx, 'landing.block.getrepository', { scope });
   if (!isObj(r.result)) throw upstreamShapeError('landing.block.getrepository', 'legacy');
   for (const section of Object.values(r.result)) {
-    if (isObj(section) && isObj(section['items']) && code in section['items']) return code;
+    if (isObj(section) && isObj(section['items']) && Object.hasOwn(section['items'], code)) return code;
   }
   throw new AppError('VALIDATION_ERROR', `Блок ${code} недоступен в репозитории landing для scope ${scope}`, {
     field: 'blockCode',
