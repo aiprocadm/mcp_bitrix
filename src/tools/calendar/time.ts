@@ -103,3 +103,34 @@ export function unixToZoned(unix: number, tz: string): string {
   });
   return dtf.format(new Date(unix * 1000)).replace(',', '');
 }
+
+/** unix seconds → ISO 8601 со смещением зоны tz на этот момент: 2026-10-01T10:00:00+03:00 (DST учтён). */
+export function unixToIsoInZone(unix: number, tz: string): string {
+  const off = offsetMs(tz, unix * 1000);
+  const local = new Date(unix * 1000 + off).toISOString().slice(0, 19);
+  const sign = off < 0 ? '-' : '+';
+  const abs = Math.abs(Math.round(off / 60_000));
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return `${local}${sign}${hh}:${mm}`;
+}
+
+/** Календарная дата YYYY-MM-DD момента unix в зоне tz. */
+export function dateInZone(unix: number, tz: string): string {
+  return new Date(unix * 1000 + offsetMs(tz, unix * 1000)).toISOString().slice(0, 10);
+}
+
+/** Начало суток YYYY-MM-DD в зоне tz → unix seconds (с учётом DST). */
+export function zonedDayStart(date: string, tz: string): number {
+  const [y = '', m = '', d = ''] = date.split('-');
+  const unix = bitrixDateTimeToUnix(`${d}.${m}.${y} 00:00:00`, tz);
+  if (unix === null) {
+    throw new AppError('VALIDATION_ERROR', `дата ${date.slice(0, 20)} не распознана`, { field: 'from' });
+  }
+  return unix;
+}
+
+/** YYYY-MM-DD + n суток (календарно, без зоны). */
+export function addDays(date: string, n: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+}
