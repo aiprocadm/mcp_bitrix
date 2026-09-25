@@ -1,0 +1,324 @@
+{
+  "name": "employee_availability",
+  "title": "Календарная занятость сотрудников",
+  "description": "Занятость сотрудников по данным их календарей Bitrix24 (calendar.accessibility.get): интервалы busy/absent/tentative и свободные промежутки внутри периода. Использовать, чтобы подобрать время встречи для нескольких человек (до 50). Это только календарь — не присутствие на работе и не загрузка задачами. Если по сотруднику данных нет, completeness=unknown и свободное время не утверждается. from/to — обе даты YYYY-MM-DD или обе ISO с явным смещением; период до 62 дней. Названия чужих событий не выдаются.",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "userIds": {
+        "minItems": 1,
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "from": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 40,
+        "description": "Начало: дата YYYY-MM-DD (в зоне timezone) либо ISO с явным смещением 2026-10-01T09:00:00+03:00"
+      },
+      "to": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 40,
+        "description": "Конец: YYYY-MM-DD включительно либо ISO с явным смещением (должно быть позже from)"
+      },
+      "timezone": {
+        "description": "IANA-зона для дат без времени и для показа результата; по умолчанию зона портала из конфигурации",
+        "type": "string",
+        "maxLength": 64
+      }
+    },
+    "required": [
+      "userIds",
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "users": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "number"
+                    },
+                    "completeness": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "unknown"
+                      ]
+                    },
+                    "busy": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "allDay": {
+                            "type": "boolean"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "busy",
+                              "absent",
+                              "tentative"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "allDay",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "free": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userId",
+                    "completeness",
+                    "busy"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "timezone",
+              "users"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "crm_update_record",
   "title": "Изменить запись CRM",
-  "description": "Изменить поля записи классического CRM (сделка, лид, контакт, компания) через crm.<entity>.update. Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (diff «было → станет»); человек подтверждает; повторный вызов с теми же параметрами и approvalId применяет изменение один раз.",
+  "description": "Изменить поля записи CRM: сделка, лид, контакт, компания (crm.<entity>.update, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.update (поля camelCase). Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (diff «было → станет»); человек подтверждает; повторный вызов с теми же параметрами и approvalId применяет изменение один раз.",
   "annotations": {
     "readOnlyHint": false,
     "destructiveHint": false,
@@ -18,9 +18,17 @@
           "deal",
           "lead",
           "contact",
-          "company"
+          "company",
+          "smart",
+          "invoice"
         ],
-        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+      },
+      "entityTypeId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 1000000,
+        "description": "Только для entityType=smart: entityTypeId смарт-процесса из smart_process_types_list (не id типа crm.type)"
       },
       "id": {
         "type": "integer",
@@ -32,7 +40,7 @@
         "type": "object",
         "propertyNames": {
           "type": "string",
-          "pattern": "^[A-Z][A-Z0-9_]{0,99}$"
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,99}$"
         },
         "additionalProperties": {
           "anyOf": [
@@ -89,7 +97,7 @@
             }
           ]
         },
-        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР, пользовательские UF_CRM_*"
+        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР (TITLE, UF_CRM_*); smart/invoice (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится"
       },
       "dryRun": {
         "default": false,
@@ -141,9 +149,14 @@
                   "deal",
                   "lead",
                   "contact",
-                  "company"
+                  "company",
+                  "smart",
+                  "invoice"
                 ],
-                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+              },
+              "entityTypeId": {
+                "type": "number"
               },
               "id": {
                 "type": "number"

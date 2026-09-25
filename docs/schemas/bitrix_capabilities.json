@@ -33,6 +33,17 @@
           "groups"
         ]
       },
+      "methods": {
+        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
+        "minItems": 1,
+        "maxItems": 60,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9_.]*$"
+        }
+      },
       "refresh": {
         "default": false,
         "description": "Игнорировать кэш (5 минут)",

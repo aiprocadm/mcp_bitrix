@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { WebhookAuthProvider } from '../../src/auth/webhook-provider.js';
 import { mapUpstreamError } from '../../src/bitrix/errors.js';
@@ -150,6 +151,17 @@ describe('реестр методов', () => {
         d.operation === 'upload'
       )
         expect(d.rawCallable).toBe(false);
+    }
+  });
+
+  it('пример raw allowlist (policies/methods.example.json): только зарегистрированные безопасные чтения', () => {
+    const policy = JSON.parse(readFileSync('policies/methods.example.json', 'utf8')) as {
+      rawAllowlist: { apiVersion: 'legacy' | 'v3'; method: string }[];
+    };
+    for (const e of policy.rawAllowlist) {
+      const d = findMethod(e.apiVersion, e.method);
+      expect(d, `${e.apiVersion}:${e.method}`).toBeDefined();
+      expect(d?.rawCallable, `${e.apiVersion}:${e.method}`).toBe(true);
     }
   });
 });

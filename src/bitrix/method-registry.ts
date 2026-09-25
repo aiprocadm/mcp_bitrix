@@ -454,7 +454,7 @@ const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
     apiVersion: 'legacy',
     operation: 'read',
     scope: 'im',
-    pagination: 'first-page-only',
+    pagination: 'offset',
     supportsNativeIdempotency: false,
     applicationContextRequired: false,
     rawCallable: true,

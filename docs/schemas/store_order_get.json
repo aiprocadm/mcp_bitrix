@@ -1,0 +1,417 @@
+{
+  "name": "store_order_get",
+  "title": "Заказ магазина",
+  "description": "Заказ интернет-магазина (sale.order.get) со статусом, суммой, оплатой/отгрузкой и составом позиций. Использовать, когда спрашивают о конкретном заказе по его ID. Если состав не пришёл вместе с заказом, он дочитывается sale.basketitem.list; неполный состав честно помечается completeness=partial (PARTIAL_RESULT). Персональные данные покупателя (ФИО, телефоны, email, адреса, комментарии) не выводятся — только ID покупателя и CRM-привязки.",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "orderId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID заказа"
+      },
+      "includeItems": {
+        "default": true,
+        "description": "Включить состав заказа",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "orderId",
+      "includeItems"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "order": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "number"
+                  },
+                  "accountNumber": {
+                    "type": "string"
+                  },
+                  "statusId": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "paid": {
+                    "type": "boolean"
+                  },
+                  "canceled": {
+                    "type": "boolean"
+                  },
+                  "deducted": {
+                    "type": "boolean"
+                  },
+                  "personTypeId": {
+                    "type": "number"
+                  },
+                  "responsibleId": {
+                    "type": "number"
+                  },
+                  "userId": {
+                    "type": "number"
+                  },
+                  "discountValue": {
+                    "type": "number"
+                  },
+                  "taxValue": {
+                    "type": "number"
+                  },
+                  "clients": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entityTypeId": {
+                          "type": "number"
+                        },
+                        "entityId": {
+                          "type": "number"
+                        },
+                        "isPrimary": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "entityTypeId",
+                        "entityId",
+                        "isPrimary"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "payments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "sum": {
+                          "type": "number"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "paid": {
+                          "type": "boolean"
+                        },
+                        "paySystemName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "paid"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "shipments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "deliveryName": {
+                          "type": "string"
+                        },
+                        "statusId": {
+                          "type": "string"
+                        },
+                        "deducted": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "deducted"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "paid",
+                  "canceled",
+                  "deducted",
+                  "clients",
+                  "payments",
+                  "shipments"
+                ],
+                "additionalProperties": false
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "productId": {
+                      "type": "number"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "number"
+                    },
+                    "measureName": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "basePrice": {
+                      "type": "number"
+                    },
+                    "discountPrice": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "vatRate": {
+                      "type": "number"
+                    },
+                    "vatIncluded": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "itemsSource": {
+                "type": "string",
+                "enum": [
+                  "order",
+                  "basketitem.list"
+                ]
+              },
+              "itemsCompleteness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial"
+                ]
+              },
+              "partialReason": {
+                "type": "string",
+                "const": "PARTIAL_RESULT"
+              }
+            },
+            "required": [
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

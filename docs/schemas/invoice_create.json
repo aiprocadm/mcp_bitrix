@@ -1,0 +1,422 @@
+{
+  "name": "invoice_create",
+  "title": "Создать счёт",
+  "description": "Создать карточку нового смарт-счёта (crm.item.add, entityTypeId=31) и, если переданы productRows, записать товарные позиции отдельным шагом (crm.item.productrow.set, ownerType=SI). Использовать, когда пользователь явно просит создать счёт. PDF, отправка клиенту, ссылка на оплату и отметка оплаты НЕ выполняются. Поля проверяются по crm.item.fields, стадия — по воронке счетов. Вызов без approvalId возвращает APPROVAL_REQUIRED с планом; после подтверждения повтор с approvalId создаёт счёт один раз. Если счёт создан, а товары нет — PARTIAL_SUCCESS с ID счёта; повтор не создаёт второй счёт.",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "fields": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,99}$"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 20000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          ]
+        },
+        "description": "Поля счёта в camelCase по crm_fields_get (entityType=invoice): title, stageId, categoryId, companyId, contactId, assignedById, currencyId, begindate, closedate, ufCrm*_…; регистр автоматически не переводится"
+      },
+      "productRows": {
+        "description": "Товарные позиции счёта (до 100)",
+        "minItems": 1,
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "productId": {
+              "description": "ID товара каталога; 0 или нет — произвольная позиция",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "productName": {
+              "description": "Название (обязательно без productId)",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "price": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000000000,
+              "description": "Цена за единицу"
+            },
+            "quantity": {
+              "default": 1,
+              "description": "Количество (> 0)",
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1000000000
+            },
+            "discountTypeId": {
+              "description": "1 — скидка суммой, 2 — процентом",
+              "anyOf": [
+                {
+                  "type": "number",
+                  "const": 1
+                },
+                {
+                  "type": "number",
+                  "const": 2
+                }
+              ]
+            },
+            "discountRate": {
+              "description": "Скидка, %",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "discountSum": {
+              "description": "Скидка суммой на единицу",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000000000
+            },
+            "taxRate": {
+              "description": "Ставка налога, %",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "taxIncluded": {
+              "description": "Налог включён в цену",
+              "type": "boolean"
+            },
+            "measureCode": {
+              "description": "Код единицы измерения",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 10000
+            },
+            "sort": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "price",
+            "quantity"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "dryRun": {
+        "default": false,
+        "description": "Только рассчитать план и проверки; ничего не записывать и не создавать подтверждение",
+        "type": "boolean"
+      },
+      "idempotencyKey": {
+        "description": "UUID, одинаковый при повторе того же намерения; обязателен, если dryRun=false",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "approvalId": {
+        "description": "operationId, подтверждённый человеком через npm run approval:review",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "fields",
+      "dryRun"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "productRows": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "saved",
+                      "failed",
+                      "unknown"
+                    ]
+                  },
+                  "requested": {
+                    "type": "number"
+                  },
+                  "saved": {
+                    "type": "number"
+                  },
+                  "errorCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "requested"
+                ],
+                "additionalProperties": false
+              },
+              "dryRun": {
+                "type": "boolean"
+              },
+              "plan": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "validationLevel": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

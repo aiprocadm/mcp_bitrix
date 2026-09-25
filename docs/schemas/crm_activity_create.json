@@ -1,0 +1,378 @@
+{
+  "name": "crm_activity_create",
+  "title": "Создать дело CRM",
+  "description": "Создать дело в таймлайне записи CRM (сделка, лид, контакт, компания). provider из явного списка: todo — универсальное дело с крайним сроком (crm.activity.todo.add), call — звонок, meeting — встреча (crm.activity.add, нужны communications: для звонка один телефон, для встречи — участники). Остальные виды (письмо, задача, SMS) — UNSUPPORTED_PROVIDER. Использовать, когда пользователь просит запланировать звонок, встречу или напоминание по клиенту. Порядок: APPROVAL_REQUIRED с планом → подтверждение человеком → повтор с approvalId; после записи дело перечитывается (crm.activity.get).",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "entityType": {
+        "type": "string",
+        "enum": [
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+      },
+      "recordId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID записи, к которой относится дело"
+      },
+      "provider": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "description": "Вид дела: todo (универсальное дело), call (звонок), meeting (встреча)"
+      },
+      "subject": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "description": "Тема дела"
+      },
+      "description": {
+        "description": "Описание (обычный текст)",
+        "type": "string",
+        "maxLength": 5000
+      },
+      "responsibleId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID ответственного сотрудника"
+      },
+      "deadline": {
+        "description": "Крайний срок (обязателен для todo), ISO 8601",
+        "type": "string",
+        "maxLength": 40
+      },
+      "start": {
+        "description": "Начало звонка/встречи (обязательно для call/meeting)",
+        "type": "string",
+        "maxLength": 40
+      },
+      "end": {
+        "description": "Окончание звонка/встречи; по умолчанию = start",
+        "type": "string",
+        "maxLength": 40
+      },
+      "direction": {
+        "description": "Только для звонка: входящий/исходящий (по умолчанию outgoing)",
+        "type": "string",
+        "enum": [
+          "incoming",
+          "outgoing"
+        ]
+      },
+      "priority": {
+        "description": "Важность (для call/meeting)",
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "communications": {
+        "description": "С кем звонок/встреча; для todo не передаётся",
+        "minItems": 1,
+        "maxItems": 10,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "entityType": {
+              "type": "string",
+              "enum": [
+                "contact",
+                "company",
+                "lead"
+              ],
+              "description": "С кем дело: контакт, компания или лид (ENTITY_TYPE_ID 3/4/1)"
+            },
+            "entityId": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "description": "ID контакта/компании/лида"
+            },
+            "value": {
+              "description": "Для звонка — номер телефона; для встречи — имя участника (необязательно)",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "entityType",
+            "entityId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "dryRun": {
+        "default": false,
+        "description": "Только рассчитать план и проверки; ничего не записывать и не создавать подтверждение",
+        "type": "boolean"
+      },
+      "idempotencyKey": {
+        "description": "UUID, одинаковый при повторе того же намерения; обязателен, если dryRun=false",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "approvalId": {
+        "description": "operationId, подтверждённый человеком через npm run approval:review",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "entityType",
+      "recordId",
+      "provider",
+      "subject",
+      "responsibleId",
+      "dryRun"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "enum": [
+                  "deal",
+                  "lead",
+                  "contact",
+                  "company"
+                ],
+                "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+              },
+              "recordId": {
+                "type": "number"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "activityId": {
+                "type": "number"
+              },
+              "dryRun": {
+                "type": "boolean"
+              },
+              "plan": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "validationLevel": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "entityType",
+              "recordId",
+              "provider"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

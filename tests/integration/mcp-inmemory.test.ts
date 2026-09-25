@@ -3,6 +3,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Client } from '@modelcontextprotocol/client';
+import { allTools } from '../../src/tools/index.js';
+import { isWriteOperation } from '../../src/tools/types.js';
 import { connectInMemory, createTestApp, structured, type TestApp } from '../helpers/app.js';
 import { legacyError, legacyOk, PROFILE_RESULT } from '../helpers/mock-bitrix.js';
 
@@ -41,38 +43,13 @@ describe('MCP через InMemoryTransport (T41)', () => {
   it('tools/list: в read-only видны только читающие инструменты, верные annotations и строгие схемы', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((x) => x.name).sort();
-    expect(names).toEqual([
-      'bitrix_capabilities',
-      'bitrix_connection_info',
-      'bitrix_rest_call',
-      'bitrix_server_version',
-      'calendar_list',
-      'calendar_list_events',
-      'chat_messages_get',
-      'chat_recent_list',
-      'crm_activities_list',
-      'crm_deal_products_get',
-      'crm_fields_get',
-      'crm_get_record',
-      'crm_list_records',
-      'crm_pipeline_summary',
-      'crm_requisite_presets_list',
-      'crm_requisites_list',
-      'crm_search_records',
-      'crm_stage_history',
-      'crm_stages_and_statuses',
-      'crm_timeline_comments_list',
-      'crm_userfields_list',
-      'disk_children_list',
-      'disk_search_files',
-      'disk_storages_list',
-      'employee_availability',
-      'operation_status',
-      'task_checklist_get',
-      'task_comments_list',
-      'task_get',
-      'task_list',
-    ]);
+    // mock.env включает все модули: видны ровно все читающие инструменты реестра (56 из 105), записи скрыты.
+    const expected = allTools()
+      .filter((d) => !isWriteOperation(d.operation))
+      .map((d) => d.name)
+      .sort();
+    expect(expected).toHaveLength(56);
+    expect(names).toEqual(expected);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);
       expect(tool.annotations?.destructiveHint).toBe(false);

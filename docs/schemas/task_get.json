@@ -1,7 +1,7 @@
 {
   "name": "task_get",
   "title": "Задача по ID",
-  "description": "Задача Bitrix24 целиком по ID в рамках доступных полей (tasks.task.get). Использовать, когда известен ID задачи и нужны её поля: название, описание, ответственный, срок, статус, участники, привязки. select ограничивает поля (имена — ВЕРХНИЙ_РЕГИСТР, например TITLE, DEADLINE, RESPONSIBLE_ID). Комментарии и чек-листы — отдельные инструменты полной версии.",
+  "description": "Задача Bitrix24 целиком по ID в рамках доступных полей (tasks.task.get). Использовать, когда известен ID задачи и нужны её поля: название, описание, ответственный, срок, статус, участники, привязки. select ограничивает поля (имена — ВЕРХНИЙ_РЕГИСТР, например TITLE, DEADLINE, RESPONSIBLE_ID). Без select ответ содержит stateHash — передайте его как expectedStateHash в task_update/task_complete/task_delete. Комментарии и чек-листы — отдельные инструменты (task_comments_list, task_checklist_get).",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -61,6 +61,9 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "stateHash": {
+                "type": "string"
               }
             },
             "required": [

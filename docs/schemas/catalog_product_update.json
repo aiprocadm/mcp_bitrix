@@ -1,0 +1,445 @@
+{
+  "name": "catalog_product_update",
+  "title": "Изменить карточку товара",
+  "description": "Изменить поля карточки товара, услуги или вариации (catalog.product.update / .service.update / .offer.update). Использовать, когда пользователь явно просит поменять название, описание, активность, НДС, габариты и т. п.; передавайте только изменяемые поля. Цены и остатки этим инструментом не меняются. productKind должен совпадать с фактическим типом позиции (иначе INVALID_PRODUCT_TYPE). stateHash — из dryRun; с expectedStateHash изменение, сделанное кем-то ещё, даст CONFLICT. Порядок: APPROVAL_REQUIRED с diff «было → станет» → подтверждение → повтор с approvalId.",
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "productId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID товара/услуги/вариации"
+      },
+      "productKind": {
+        "type": "string",
+        "enum": [
+          "product",
+          "service",
+          "offer"
+        ],
+        "description": "Вид позиции: product — простой товар, service — услуга, offer — вариация (торговое предложение)"
+      },
+      "fields": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Название",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "active": {
+            "description": "Активность Y/N",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N"
+            ]
+          },
+          "code": {
+            "description": "Символьный код",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "xmlId": {
+            "description": "Внешний код",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "iblockSectionId": {
+            "description": "ID раздела каталога",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "measure": {
+            "description": "ID единицы измерения",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "previewText": {
+            "description": "Описание для анонса",
+            "type": "string",
+            "maxLength": 20000
+          },
+          "previewTextType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "html"
+            ]
+          },
+          "detailText": {
+            "description": "Детальное описание",
+            "type": "string",
+            "maxLength": 20000
+          },
+          "detailTextType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "html"
+            ]
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "vatId": {
+            "description": "ID ставки НДС",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "vatIncluded": {
+            "description": "НДС включён в цену Y/N",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N"
+            ]
+          },
+          "dateActiveFrom": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "dateActiveTo": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "barcodeMulti": {
+            "description": "Уникальный штрихкод на каждый экземпляр (товар/вариация)",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N"
+            ]
+          },
+          "canBuyZero": {
+            "description": "Разрешить покупку при отсутствии (товар/вариация)",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N"
+            ]
+          },
+          "subscribe": {
+            "description": "Подписка на товар (товар/вариация)",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N",
+              "D"
+            ]
+          },
+          "quantityTrace": {
+            "description": "Количественный учёт (товар/вариация)",
+            "type": "string",
+            "enum": [
+              "Y",
+              "N",
+              "D"
+            ]
+          },
+          "height": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "length": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "width": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "parentId": {
+            "description": "ID родительского товара (только вариация)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false,
+        "description": "Только изменяемые поля"
+      },
+      "dryRun": {
+        "default": false,
+        "description": "Только рассчитать план и проверки; ничего не записывать и не создавать подтверждение",
+        "type": "boolean"
+      },
+      "idempotencyKey": {
+        "description": "UUID, одинаковый при повторе того же намерения; обязателен, если dryRun=false",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "approvalId": {
+        "description": "operationId, подтверждённый человеком через npm run approval:review",
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "expectedStateHash": {
+        "description": "Хеш состояния объекта из предыдущего чтения; при расхождении — CONFLICT",
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "productId",
+      "productKind",
+      "fields",
+      "dryRun"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "productId": {
+                "type": "number"
+              },
+              "productKind": {
+                "type": "string",
+                "enum": [
+                  "product",
+                  "service",
+                  "offer"
+                ],
+                "description": "Вид позиции: product — простой товар, service — услуга, offer — вариация (торговое предложение)"
+              },
+              "changedFields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "stateHash": {
+                "type": "string"
+              },
+              "dryRun": {
+                "type": "boolean"
+              },
+              "plan": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "validationLevel": {
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "productId",
+              "productKind"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}
