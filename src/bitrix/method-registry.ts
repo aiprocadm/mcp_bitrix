@@ -5,27 +5,10 @@
  *
  * Каждая запись сверена с официальной страницей метода (Приложение A ТЗ); ссылка в `source`.
  */
-export type ApiVersion = 'legacy' | 'v3';
-export type OperationKind = 'read' | 'create' | 'update' | 'delete' | 'upload' | 'admin/diagnostic';
-export type PaginationKind = 'none' | 'offset' | 'cursor' | 'message-id' | 'first-page-only';
+import { D, DOCS, type ApiVersion, type MethodDescriptor } from './registry/descriptor.js';
+import { REGISTRY_GROUPS } from './registry/index.js';
 
-export interface MethodDescriptor {
-  readonly method: string;
-  readonly apiVersion: ApiVersion;
-  readonly operation: OperationKind;
-  /** Scope Bitrix24; undefined для базовых методов без отдельного scope (profile, method.get). */
-  readonly scope?: string;
-  readonly pagination: PaginationKind;
-  readonly supportsNativeIdempotency: boolean;
-  readonly applicationContextRequired: boolean;
-  /** Разрешён ли метод для `bitrix_rest_call` в принципе (при наличии в policy allowlist). */
-  readonly rawCallable: boolean;
-  readonly source: string;
-}
-
-const D = (d: MethodDescriptor): readonly [string, MethodDescriptor] => [`${d.apiVersion}:${d.method}`, d];
-
-const DOCS = 'https://apidocs.bitrix24.ru';
+export type { ApiVersion, MethodDescriptor, OperationKind, PaginationKind } from './registry/descriptor.js';
 
 /**
  * Пять классических методов сущности CRM: fields/list/get — чтение (raw разрешён), add/update — запись.
@@ -615,7 +598,17 @@ const ENTRIES: readonly (readonly [string, MethodDescriptor])[] = [
   }),
 ];
 
-const REGISTRY: ReadonlyMap<string, MethodDescriptor> = new Map(ENTRIES);
+/** Реестр: базовые записи + группы модулей (src/bitrix/registry/*). Дубль ключа — ошибка загрузки. */
+function buildRegistry(): ReadonlyMap<string, MethodDescriptor> {
+  const map = new Map<string, MethodDescriptor>();
+  for (const [key, d] of [...ENTRIES, ...REGISTRY_GROUPS.flat()]) {
+    if (map.has(key)) throw new Error(`Метод зарегистрирован дважды: ${key}`);
+    map.set(key, d);
+  }
+  return map;
+}
+
+const REGISTRY: ReadonlyMap<string, MethodDescriptor> = buildRegistry();
 
 /** Разрешённые символы имени метода; `/`, `?`, `#`, `%`, `..` исключены (ТЗ §14.1). */
 const METHOD_NAME_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
