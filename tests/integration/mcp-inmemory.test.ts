@@ -60,6 +60,8 @@ describe('MCP через InMemoryTransport (T41)', () => {
       'crm_timeline_comments_list',
       'crm_userfields_list',
       'operation_status',
+      'task_checklist_get',
+      'task_comments_list',
       'task_get',
       'task_list',
     ]);

@@ -3,6 +3,7 @@ import { ok } from '../../mcp/result.js';
 import { defineTool, READ_ANNOTATIONS } from '../types.js';
 import { taskStatusName, validateTaskSelect } from './task-fields.js';
 import { getTask, getTaskFieldsMeta, taskBrief } from './task-service.js';
+import { taskStateHash } from './task-write-service.js';
 
 export const taskGetTool = defineTool({
   name: 'task_get',
@@ -12,7 +13,8 @@ export const taskGetTool = defineTool({
     'Задача Bitrix24 целиком по ID в рамках доступных полей (tasks.task.get). Использовать, когда известен ID задачи ' +
     'и нужны её поля: название, описание, ответственный, срок, статус, участники, привязки. ' +
     'select ограничивает поля (имена — ВЕРХНИЙ_РЕГИСТР, например TITLE, DEADLINE, RESPONSIBLE_ID). ' +
-    'Комментарии и чек-листы — отдельные инструменты полной версии.',
+    'Без select ответ содержит stateHash — передайте его как expectedStateHash в task_update/task_complete/task_delete. ' +
+    'Комментарии и чек-листы — отдельные инструменты (task_comments_list, task_checklist_get).',
   operation: 'read',
   annotations: READ_ANNOTATIONS,
   requiresBitrix: true,
@@ -30,12 +32,19 @@ export const taskGetTool = defineTool({
     taskId: z.number(),
     brief: z.record(z.string(), z.unknown()),
     task: z.record(z.string(), z.unknown()),
+    stateHash: z.string().optional(),
   }),
   handler: async (args, ctx) => {
     if (args.select) validateTaskSelect(args.select, await getTaskFieldsMeta(ctx));
     const task = await getTask(ctx, args.taskId, args.select);
     return ok(
-      { taskId: args.taskId, brief: taskBrief(task, taskStatusName), task },
+      {
+        taskId: args.taskId,
+        brief: taskBrief(task, taskStatusName),
+        task,
+        // Хеш считается по стандартному набору полей — только для полного чтения (без select).
+        ...(args.select ? {} : { stateHash: taskStateHash(task) }),
+      },
       {
         requestId: ctx.requestId,
         durationMs: Date.now() - ctx.startedAt,
