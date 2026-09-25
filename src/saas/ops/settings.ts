@@ -32,6 +32,7 @@ export const WORKER_TASK_NAMES = {
   appInfo: 'bitrix.app_info', // S3: app.info раз в сутки (§8)
   retention: 'retention.cleanup', // §6.3: аудит 90 дней, данные после окончания подписки, криптоудаление
   dcrCleanup: 'oauth.dcr_cleanup', // S4: неиспользуемые клиенты DCR через 30 дней (§7.1)
+  tokenRefresh: 'bitrix.token_refresh', // §7.3: продление refresh-токенов Bitrix24 до истечения 180 дней
 } as const;
 
 function int(

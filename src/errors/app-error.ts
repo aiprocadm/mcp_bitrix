@@ -54,6 +54,9 @@ export interface ErrorDetails {
   /** Безопасное краткое описание плана записи (без секретов) при APPROVAL_REQUIRED. */
   plan?: Record<string, unknown>;
   status?: string;
+  /** SaaS-ТЗ §11.2 (D12): ссылка на подтверждение плана в кабинете и короткий код для сверки. */
+  approvalUrl?: string;
+  approvalCode?: string;
 }
 
 const RETRYABLE: ReadonlySet<ErrorCode> = new Set(['BITRIX_TIMEOUT', 'BITRIX_RATE_LIMITED']);

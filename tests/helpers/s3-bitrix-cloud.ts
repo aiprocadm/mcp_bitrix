@@ -81,6 +81,14 @@ export class FakeBitrixCloud {
   /** HTTP-статус «недоступности» сервера авторизации. */
   oauthHttpFailure: number | undefined;
   now = () => Date.now();
+  /**
+   * Дополнительные методы REST (сборка режима saas: инструменты поверх портала). Возвращают `result` (и доп. поля
+   * ответа legacy, например `total`), вызываются только с действующим токеном пользователя портала.
+   */
+  readonly extraMethods = new Map<
+    string,
+    (body: Record<string, unknown>, user: PortalUser | undefined) => { result: unknown; [k: string]: unknown }
+  >();
 
   addPortal(memberId: string, domain: string, users: PortalUser[]): Portal {
     const p: Portal = {
@@ -248,8 +256,11 @@ export class FakeBitrixCloud {
       }
       case 'app.info':
         return json(200, { result: portal.appInfo, time: TIME });
-      default:
+      default: {
+        const extra = this.extraMethods.get(method);
+        if (extra) return json(200, { ...extra(body, user), time: TIME });
         return json(400, { error: 'ERROR_METHOD_NOT_FOUND', error_description: 'Method not found!' });
+      }
     }
   }
 

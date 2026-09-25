@@ -24,7 +24,7 @@ import { AdminAccounts } from '../http/admin-auth.js';
 import { InboundLimiter } from '../security/inbound-limiter.js';
 import { ApprovalService } from '../security/approval-service.js';
 import { ensureMasterKey, SecretBox } from '../security/crypto.js';
-import { MutationExecutor } from '../security/mutation-executor.js';
+import { MutationExecutor, type MutationFinished } from '../security/mutation-executor.js';
 import { OutputPolicyEngine } from '../security/output-policy.js';
 import { Database } from '../storage/database.js';
 import { MemoryTtlCache } from '../storage/memory-cache.js';
@@ -156,11 +156,25 @@ export interface TenantSpec {
   readonly allowedHosts?: readonly string[];
   /** Лимитер портала; по умолчанию — лимитер процесса. В SaaS — общий для кластера (S8, S15). */
   readonly limiter?: PortalLimiter;
+  /**
+   * Ключ шифрования курсоров, планов и результатов операций. По умолчанию — ключ платформы (single).
+   * В SaaS — DEK арендатора (D7): утечка строк одного арендатора не раскрывает планы другого.
+   */
+  readonly secretBox?: SecretBox;
+  /**
+   * Обслуживание при сборке контекста (T16 executing → unknown, истёкшие планы/курсоры/файлы/аудит). По умолчанию
+   * true (single: один раз при старте процесса). В SaaS контекст пересобирается на запрос и на нескольких
+   * экземплярах: executing чужого экземпляра нельзя объявлять unknown — обслуживание делает worker.
+   */
+  readonly maintenance?: boolean;
+  /** Наблюдатель исполненных записей (учёт использования SaaS, §9.2); в single не задаётся. */
+  readonly onMutationFinished?: (e: MutationFinished) => void | Promise<void>;
 }
 
 /** Контекст арендатора поверх общей платформы: свой клиент и лимитер портала, свои сервисы записи. */
 export function createTenantScope(platform: Platform, spec: TenantSpec): TenantScope {
-  const { config, db, secretBox, audit, logger, policies } = platform;
+  const { config, db, audit, logger, policies } = platform;
+  const secretBox = spec.secretBox ?? platform.secretBox;
   const limiter =
     spec.limiter ??
     new RateLimiter({
@@ -184,6 +198,7 @@ export function createTenantScope(platform: Platform, spec: TenantSpec): TenantS
   const operations = new OperationsStore(db, spec.tenantId);
   const files = platform.fileStaging.forTenant(spec.tenantId);
   const ready = (async () => {
+    if (spec.maintenance === false) return;
     const recovered = await operations.recoverAfterRestart();
     if (recovered > 0)
       logger.warn({ recovered }, 'operations in executing state marked unknown after restart');
@@ -207,6 +222,7 @@ export function createTenantScope(platform: Platform, spec: TenantSpec): TenantS
     policyVersion: policies.version,
     confirmAllWrites: config.policy.confirmAllWrites,
     maxPreparationsPerMinute: 10,
+    ...(spec.onMutationFinished ? { onFinished: spec.onMutationFinished } : {}),
   });
   return {
     tenantId: spec.tenantId,
@@ -235,8 +251,11 @@ export function createApp(config: AppConfig, opts: CreateAppOptions = {}): AppCo
   if (config.deployment.mode !== 'single') {
     throw new AppError(
       'CONFIG_INVALID',
-      'DEPLOYMENT_MODE=saas ещё не собирается: компоненты SaaS появляются по этапам S1–S4 (docs/saas/STATUS.md)',
-      { field: 'DEPLOYMENT_MODE', nextAction: 'Для работы сейчас используйте DEPLOYMENT_MODE=single' },
+      'createApp собирает только DEPLOYMENT_MODE=single; режим saas собирает createSaasRuntime (src/saas/runtime.ts)',
+      {
+        field: 'DEPLOYMENT_MODE',
+        nextAction: 'Запустите сервер (src/index.ts): при DEPLOYMENT_MODE=saas он соберёт режим saas сам',
+      },
     );
   }
   if (!config.bitrix.webhook) {

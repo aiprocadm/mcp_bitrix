@@ -662,6 +662,40 @@ export class SubscriptionService {
     await this.changed(events);
   }
 
+  /**
+   * Приложение удалено с портала (SaaS-ТЗ §4 сценарий 6, §10.2 «uninstalled»): списания останавливаются сразу.
+   * Подписка в работе (trialing/active/past_due) → canceled с отметкой остановки (отсчёт 30 дней хранения §6.3,
+   * затем dataDeletionDue); сохранённый способ оплаты стирается — автосписаний после удаления нет. Повторный
+   * вызов (повтор события Bitrix24) ничего не меняет. Остаток оплаченного периода не возвращается автоматически:
+   * возврат — вручную владельцем (`refund`). При переустановке пробный период не повторяется (§9.1) — нужна оплата.
+   */
+  async stopForUninstall(tenantId: string): Promise<{ stopped: boolean }> {
+    const at = this.now().toISOString();
+    const events = await this.o.db.transaction(async (x): Promise<SubscriptionEvent[]> => {
+      const s = await BillingStore.subscription(x, tenantId, true);
+      if (!s) return [];
+      const hadMethod = s.paymentMethodEncrypted !== null;
+      if (hadMethod) {
+        await x.run(
+          'UPDATE subscriptions SET payment_method_encrypted = NULL, payment_method_title = NULL, updated_at = ? WHERE tenant_id = ?',
+          at,
+          tenantId,
+        );
+      }
+      if (s.status === 'suspended' || s.status === 'canceled') return [];
+      s.status = 'canceled';
+      s.cancelAtPeriodEnd = false;
+      s.pendingPlanCode = null;
+      s.nextRetryAt = null;
+      s.suspendedAt = at;
+      await BillingStore.writeSubscription(x, s, at);
+      return [{ tenantId, type: 'canceled', status: 'canceled', planCode: s.planCode }];
+    });
+    await this.changed(events);
+    if (events.length) this.o.logger.info({ tenantId }, 'subscription stopped: app uninstalled');
+    return { stopped: events.length > 0 };
+  }
+
   /** Отказ от отмены до конца периода. */
   async resume(tenantId: string): Promise<void> {
     const at = this.now().toISOString();

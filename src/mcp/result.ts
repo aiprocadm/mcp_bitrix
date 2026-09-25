@@ -111,7 +111,17 @@ export function enforceResponseLimit(envelope: Envelope, maxBytes: number): Enve
     // Большой план не должен терять operationId/срок: без них подтверждение невозможно.
     // План целиком остаётся в хранилище операций и показывается в approval:review / панели.
     const keep: Record<string, unknown> = {};
-    for (const k of ['operationId', 'expiresAt', 'field', 'reason', 'method', 'apiVersion', 'upstreamCode']) {
+    for (const k of [
+      'operationId',
+      'expiresAt',
+      'field',
+      'reason',
+      'method',
+      'apiVersion',
+      'upstreamCode',
+      'approvalUrl',
+      'approvalCode',
+    ]) {
       const v = (envelope.error.details as Record<string, unknown>)[k];
       if (v !== undefined) keep[k] = v;
     }
@@ -125,7 +135,9 @@ export function enforceResponseLimit(envelope: Envelope, maxBytes: number): Enve
       };
     }
     keep['nextAction'] =
-      'План не поместился в ответ (MAX_RESPONSE_BYTES): полный план — в npm run approval:review -- --id <operationId>';
+      typeof keep['approvalUrl'] === 'string'
+        ? `План не поместился в ответ (MAX_RESPONSE_BYTES): полный план — по ссылке ${keep['approvalUrl']}`
+        : 'План не поместился в ответ (MAX_RESPONSE_BYTES): полный план — в npm run approval:review -- --id <operationId>';
     const slim: Envelope = { ...envelope, error: { ...envelope.error, details: keep } };
     return size(slim) <= maxBytes ? slim : { ...envelope, error: { ...envelope.error, details: {} } };
   }

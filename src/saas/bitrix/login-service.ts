@@ -55,7 +55,8 @@ export class BitrixLoginService {
 
   /** Адрес авторизации на портале; портал должен быть установлен (иначе — «установите приложение»). */
   async authorizeUrl(portalDomain: string, state: string): Promise<string> {
-    if (!/^[A-Za-z0-9._~-]{16,256}$/.test(state)) {
+    // Состояние сервера авторизации MCP (S4) — запечатанный запрос до 1024 символов (MAX_STATE_LENGTH).
+    if (!/^[A-Za-z0-9._~-]{16,1024}$/.test(state)) {
       throw new AppError('VALIDATION_ERROR', 'Некорректный state', { field: 'state' });
     }
     const tenant = await this.d.tenants.getByDomain(portalDomain);

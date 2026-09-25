@@ -12,6 +12,28 @@ import { AppError } from '../errors/app-error.js';
 import { isWriteOperation, type ToolContext, type ToolDefinition } from '../tools/types.js';
 import { enforceResponseLimit, envelopeSchema, fail, toCallToolResult, type Envelope } from './result.js';
 
+/**
+ * Необязательные точки расширения диспетчера (SaaS-ТЗ §5.2, §9, §11.2). В single не задаются — путь вызова
+ * ровно как в базовом ТЗ. Режим saas (src/saas/dispatch-hooks.ts) подключает тариф/квоты, учёт, метрики и approvalUrl.
+ */
+export interface DispatchHooks {
+  /** Доп. причина скрыть инструмент в tools/list (тариф/модули арендатора); скрытый отключается как в T10. */
+  hiddenReason?(def: ToolDefinition): string | undefined;
+  /** После лимита входящих и gate, до проверки схемы и handler; AppError → ответ ошибкой (подписка, квота). */
+  beforeHandler?(def: ToolDefinition, principal: Principal): Promise<void>;
+  /**
+   * Обёртка вызова (проверки, схема, handler — `next`); ответ ещё до аудита и output policy. Может дополнить
+   * ответ (approvalUrl) и учесть вызов. Исключение из `around` становится ответом-ошибкой.
+   */
+  around?(call: DispatchCall, next: () => Promise<Envelope>): Promise<Envelope>;
+}
+
+export interface DispatchCall {
+  readonly def: ToolDefinition;
+  readonly principal: Principal;
+  readonly requestId: string;
+}
+
 export interface RegisteredToolInfo {
   name: string;
   module: string;
@@ -24,6 +46,7 @@ export function hiddenReason(
   def: ToolDefinition,
   app: AppContainer,
   principal: Principal = app.principal,
+  hooks?: DispatchHooks,
 ): string | undefined {
   const p = app.config.policy;
   if (isWriteOperation(def.operation) && p.readOnlyMode) return 'READ_ONLY_MODE=true';
@@ -35,7 +58,7 @@ export function hiddenReason(
   // Роль reader не видит инструменты записи: они всё равно отказали бы (ТЗ §10.4).
   if (isWriteOperation(def.operation) && !roleAtLeast(principal.role, 'operator'))
     return `запрещён ролью ${principal.role}`;
-  return undefined;
+  return hooks?.hiddenReason?.(def);
 }
 
 /** Проверки до вызова handler. Выполняются на каждом tools/call, даже если инструмент скрыт. */
@@ -70,6 +93,7 @@ export async function dispatch(
   app: AppContainer,
   signal?: AbortSignal,
   principal: Principal = app.principal,
+  hooks?: DispatchHooks,
 ): Promise<Envelope> {
   const requestId = randomUUID();
   const startedAt = Date.now();
@@ -91,27 +115,42 @@ export async function dispatch(
     signal,
     startedAt,
   };
-  let envelope: Envelope;
-  try {
-    // ТЗ §8.6: read-вызовы — 60/мин на оператора; write-подготовки считает MutationExecutor.
-    if (!isWriteOperation(def.operation)) app.inboundLimiter.take(principal.id);
-    gate(def, app, principal);
-    const parsed = def.inputSchema.safeParse(args);
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      const field = issue?.path.join('.') ?? '';
-      throw new AppError(
-        'VALIDATION_ERROR',
-        `Неверные параметры: ${field} ${issue?.message ?? ''}`.trim(),
-        field ? { field } : {},
-      );
-    }
-    envelope = await def.handler(parsed.data, ctx);
-  } catch (e) {
+  const failed = (e: unknown): Envelope => {
     const err = AppError.from(e);
     if (err.code === 'INTERNAL_ERROR')
       ctx.logger.error({ reason: err.details.reason }, 'tool handler failed');
-    envelope = fail(err, { requestId, durationMs: Date.now() - startedAt });
+    return fail(err, { requestId, durationMs: Date.now() - startedAt });
+  };
+  const invoke = async (): Promise<Envelope> => {
+    try {
+      // ТЗ §8.6: read-вызовы — 60/мин на оператора; write-подготовки считает MutationExecutor.
+      if (!isWriteOperation(def.operation)) app.inboundLimiter.take(principal.id);
+      gate(def, app, principal);
+      if (hooks?.beforeHandler) await hooks.beforeHandler(def, principal);
+      const parsed = def.inputSchema.safeParse(args);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const field = issue?.path.join('.') ?? '';
+        throw new AppError(
+          'VALIDATION_ERROR',
+          `Неверные параметры: ${field} ${issue?.message ?? ''}`.trim(),
+          field ? { field } : {},
+        );
+      }
+      return await def.handler(parsed.data, ctx);
+    } catch (e) {
+      return failed(e);
+    }
+  };
+  let envelope: Envelope;
+  if (hooks?.around) {
+    try {
+      envelope = await hooks.around({ def, principal, requestId }, invoke);
+    } catch (e) {
+      envelope = failed(e);
+    }
+  } else {
+    envelope = await invoke();
   }
   await app.audit.record({
     tenantId: app.tenantId,
@@ -144,6 +183,7 @@ export function registerTools(
   server: McpServer,
   app: AppContainer,
   principal: Principal = app.principal,
+  hooks?: DispatchHooks,
 ): RegisteredToolInfo[] {
   const infos: RegisteredToolInfo[] = [];
   for (const def of app.tools) {
@@ -158,11 +198,11 @@ export function registerTools(
       },
       async (args, ctx): Promise<CallToolResult> => {
         // Схема уже проверена SDK; повторная проверка в dispatch защищает прямые вызовы (CLI/HTTP-обёртки).
-        const envelope = await dispatch(def, args, app, ctx.mcpReq.signal, principal);
+        const envelope = await dispatch(def, args, app, ctx.mcpReq.signal, principal, hooks);
         return toCallToolResult(envelope) as CallToolResult;
       },
     );
-    const reason = hiddenReason(def, app, principal);
+    const reason = hiddenReason(def, app, principal, hooks);
     if (reason) registered.disable();
     infos.push({
       name: def.name,

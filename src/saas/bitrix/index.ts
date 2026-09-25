@@ -10,3 +10,4 @@ export * from './events-service.js';
 export * from './login-service.js';
 export * from './app-status.js';
 export * from './invalidation.js';
+export * from './login-gateway.js';

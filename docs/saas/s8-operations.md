@@ -103,7 +103,7 @@ renderPrometheus(metrics.registry) // → { contentType, body } для GET /metr
 
 - **docker compose не запускался** (Docker в среде нет): сборка образа, healthcheck-и, сети, init-скрипт внутри образа
   postgres, конфиг Redis из секрета, nginx (`nginx -t`) — проверить на стенде по чек-листу ниже.
-- Процессная роль `worker` в `src/index.ts` пока не подключена (сборка режима saas): compose описывает её заранее.
+- Процессная роль `worker` подключена сборкой режима saas (`src/saas/main.ts`, `docs/saas/runtime.md`); запуск в compose не проверялся.
 - Нагрузочный тест §13 (50 вызовов/с, 200 арендаторов) и выкат без простоя на живом стенде — не выполнены.
 - `rediss://` (TLS) — код есть, с настоящим TLS-Redis не проверен; управляемый Redis/PostgreSQL провайдера — не проверены.
 - Алерты — не проверены `promtool`/живым Prometheus.

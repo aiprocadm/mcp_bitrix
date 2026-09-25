@@ -103,7 +103,8 @@ server {
 
     # Уведомления ЮKassa (§10.1): сервис всё равно перепроверяет статус через API; при желании — allow-список
     # адресов из документации ЮKassa (https://yookassa.ru/developers/using-api/webhooks#ip).
-    location = /billing/hooks {
+    # /billing/hooks и /billing/hooks/yookassa; адрес отправителя сервис берёт из X-Forwarded-For (TRUSTED_PROXIES).
+    location ^~ /billing/hooks {
         proxy_pass http://mcp_web;
     }
 

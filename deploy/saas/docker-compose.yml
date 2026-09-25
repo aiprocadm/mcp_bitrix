@@ -4,7 +4,8 @@
 #
 # Запуск (из каталога deploy/saas):
 #   1) cp saas.env.example saas.env && chmod 600 saas.env   — заполнить; секреты — только здесь и в ./secrets
-#   2) ./secrets/: kek (32 байта), pg_superuser_password, pg_app_password, pg_backup_password, redis_password (права 600)
+#   2) ./secrets/: kek (32 байта: openssl rand -hex 32), pg_superuser_password, pg_app_password, pg_backup_password,
+#      redis_password, b24_client_secret, yookassa_secret_key, metrics_token (права 600)
 #   3) ./certs/: fullchain.pem, privkey.pem (или certbot, см. nginx.conf.example)
 #   4) docker compose up -d --build
 # Выкат без простоя: `docker compose build && docker compose up -d --no-deps web1 && (дождаться healthy) &&
@@ -29,8 +30,13 @@ x-app: &app
   volumes:
     # saas.env (права 600) монтируется как /app/config/.env — формат и загрузка как в режиме single
     - ./saas.env:/app/config/.env:ro
+    # общий том web/worker: ключи подписи JWT сервера авторизации (OAUTH_SIGNING_KEYS_DIR) и staging файлов
+    - appdata:/app/data
   secrets:
     - kek # KEK_FILE=/run/secrets/kek — вне БД и вне бэкапов (§12 п.3)
+    - b24_client_secret # B24_APP_CLIENT_SECRET_FILE
+    - yookassa_secret_key # YOOKASSA_SECRET_KEY_FILE
+    - metrics_token # METRICS_TOKEN_FILE: Bearer для /metrics из внутренней сети (Prometheus)
   depends_on:
     postgres:
       condition: service_healthy
@@ -153,12 +159,19 @@ networks:
     internal: true # PostgreSQL и Redis недоступны снаружи
 
 volumes:
+  appdata: {}
   pgdata: {}
   redisdata: {}
 
 secrets:
   kek:
     file: ./secrets/kek
+  b24_client_secret:
+    file: ./secrets/b24_client_secret
+  yookassa_secret_key:
+    file: ./secrets/yookassa_secret_key
+  metrics_token:
+    file: ./secrets/metrics_token
   pg_superuser_password:
     file: ./secrets/pg_superuser_password
   pg_app_password:

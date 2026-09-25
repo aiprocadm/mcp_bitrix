@@ -72,6 +72,15 @@ export interface ExecutedOutcome {
 
 export type MutationOutcome = DryRunOutcome | ExecutedOutcome;
 
+/** Итог исполнения подтверждённой операции (для учёта использования SaaS). */
+export interface MutationFinished {
+  readonly operationId: string;
+  readonly tool: string;
+  readonly operationKind: OperationKind;
+  readonly principalId: string;
+  readonly status: 'succeeded' | 'unknown';
+}
+
 interface StoredResult {
   id: number | string | null;
   result: Record<string, unknown>;
@@ -96,8 +105,23 @@ export class MutationExecutor {
       policyVersion: string;
       confirmAllWrites: boolean;
       maxPreparationsPerMinute: number;
+      /**
+       * Итог выполненной записи (SaaS-ТЗ §9.2: «запись» = операция succeeded или unknown) — для учёта
+       * использования. Вызывается после сохранения статуса; ошибка наблюдателя не влияет на запись.
+       * В single не задаётся.
+       */
+      onFinished?: (e: MutationFinished) => void | Promise<void>;
     },
   ) {}
+
+  private async notifyFinished(e: MutationFinished): Promise<void> {
+    if (!this.opts.onFinished) return;
+    try {
+      await this.opts.onFinished(e);
+    } catch (err) {
+      this.logger.warn({ reason: err instanceof Error ? err.name : 'unknown' }, 'mutation observer failed');
+    }
+  }
 
   async execute(req: MutationRequest): Promise<MutationOutcome> {
     const dryRun = req.args['dryRun'] === true;
@@ -310,6 +334,15 @@ export class MutationExecutor {
         outcome: status === 'unknown' ? 'unknown' : 'error',
         errorCode: err.code,
       });
+      if (status === 'unknown') {
+        await this.notifyFinished({
+          operationId: op.id,
+          tool: req.tool,
+          operationKind: req.operationKind,
+          principalId: req.principal.id,
+          status: 'unknown',
+        });
+      }
       throw new AppError(err.code, err.message, { ...err.details, operationId: op.id });
     }
 
@@ -340,6 +373,13 @@ export class MutationExecutor {
       outcome: 'success',
     });
     this.logger.info({ operationId: op.id, tool: req.tool, verified }, 'mutation executed');
+    await this.notifyFinished({
+      operationId: op.id,
+      tool: req.tool,
+      operationKind: req.operationKind,
+      principalId: req.principal.id,
+      status: 'succeeded',
+    });
     return { kind: 'executed', operationId: op.id, ...stored, replayed: false };
   }
 
