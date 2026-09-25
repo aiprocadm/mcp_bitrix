@@ -126,7 +126,7 @@ export function enforceResponseLimit(envelope: Envelope, maxBytes: number): Enve
     }
     keep['nextAction'] =
       'План не поместился в ответ (MAX_RESPONSE_BYTES): полный план — в npm run approval:review -- --id <operationId>';
-    const slim: Envelope = { ...envelope, error: { ...envelope.error, details: keep as ErrorDetails } };
+    const slim: Envelope = { ...envelope, error: { ...envelope.error, details: keep } };
     return size(slim) <= maxBytes ? slim : { ...envelope, error: { ...envelope.error, details: {} } };
   }
   const data = envelope.data as { items?: unknown[] } | null;
