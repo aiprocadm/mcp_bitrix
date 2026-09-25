@@ -1,0 +1,169 @@
+# SaaS-профиль (SaaS-ТЗ §5.1, §13; этап S8): nginx (HTTPS) → web ×2 → PostgreSQL 16 + Redis 7; worker ×1 с лидером.
+# НЕ ПРОВЕРЕН ЗАПУСКОМ: в среде разработки нет Docker; синтаксис YAML и инварианты безопасности проверяет тест
+# tests/unit/s8-deploy.test.ts. Проверка живым запуском — на стенде (docs/saas/s8-operations.md, чек-лист).
+#
+# Запуск (из каталога deploy/saas):
+#   1) cp saas.env.example saas.env && chmod 600 saas.env   — заполнить; секреты — только здесь и в ./secrets
+#   2) ./secrets/: kek (32 байта), pg_superuser_password, pg_app_password, pg_backup_password, redis_password (права 600)
+#   3) ./certs/: fullchain.pem, privkey.pem (или certbot, см. nginx.conf.example)
+#   4) docker compose up -d --build
+# Выкат без простоя: `docker compose build && docker compose up -d --no-deps web1 && (дождаться healthy) &&
+#   docker compose up -d --no-deps web2 && docker compose up -d --no-deps worker` — миграции expand/contract (§13).
+
+name: mcp-saas
+
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: mcp-bitrix24-saas:local
+  restart: unless-stopped
+  user: mcp
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  volumes:
+    # saas.env (права 600) монтируется как /app/config/.env — формат и загрузка как в режиме single
+    - ./saas.env:/app/config/.env:ro
+  secrets:
+    - kek # KEK_FILE=/run/secrets/kek — вне БД и вне бэкапов (§12 п.3)
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options:
+      max-size: '20m'
+      max-file: '7' # технические логи ~14 дней (§6.3) при типичной нагрузке
+
+x-web: &web
+  <<: *app
+  environment:
+    PROCESS_ROLE: web
+    MCP_TRANSPORT: http
+    MCP_HOST: 0.0.0.0 # только внутренняя сеть compose; наружу — только nginx
+    MCP_PORT: '3000'
+  networks: [edge, egress, backend]
+  stop_grace_period: 30s
+  healthcheck:
+    test:
+      [
+        'CMD',
+        'node',
+        '-e',
+        "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+
+services:
+  web1:
+    <<: *web
+  web2:
+    <<: *web
+
+  worker:
+    <<: *app
+    environment:
+      PROCESS_ROLE: worker
+      MCP_TRANSPORT: http
+      MCP_HOST: 127.0.0.1
+      MCP_PORT: '3000'
+    networks: [egress, backend] # egress: OAuth Bitrix24, API ЮKassa, SMTP
+    # больше WORKER_SHUTDOWN_GRACE_MS (25 с): задачи успевают завершиться и аренда лидера снимается
+    stop_grace_period: 40s
+
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - pg_superuser_password
+      - pg_app_password
+      - pg_backup_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # роль сервиса без SUPERUSER/BYPASSRLS и роль бэкапа (только чтение) — при первой инициализации тома
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d mcp']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    shm_size: 256m
+
+  redis:
+    image: redis:7-bookworm
+    restart: unless-stopped
+    # Пароль — из файла секрета в конфиг во временной ФС (не в аргументах процесса); AOF для счётчиков учёта (§9.2).
+    command:
+      - sh
+      - -c
+      - >-
+        umask 077 &&
+        printf 'requirepass %s\nappendonly yes\nappendfsync everysec\ndir /data\nprotected-mode yes\nmaxmemory-policy noeviction\n'
+        "$$(cat /run/secrets/redis_password)" > /tmp/redis.conf &&
+        exec redis-server /tmp/redis.conf
+    tmpfs:
+      - /tmp:size=1m,mode=1777
+    secrets:
+      - redis_password
+    volumes:
+      - redisdata:/data
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$(cat /run/secrets/redis_password)" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  nginx:
+    image: nginx:1.27-bookworm
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx.conf.example:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      web1:
+        condition: service_healthy
+      web2:
+        condition: service_healthy
+    networks: [edge]
+
+networks:
+  edge: {} # nginx ↔ web
+  egress: {} # исходящие запросы web/worker к порталам Bitrix24 и провайдерам
+  backend:
+    internal: true # PostgreSQL и Redis недоступны снаружи
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+
+secrets:
+  kek:
+    file: ./secrets/kek
+  pg_superuser_password:
+    file: ./secrets/pg_superuser_password
+  pg_app_password:
+    file: ./secrets/pg_app_password
+  pg_backup_password:
+    file: ./secrets/pg_backup_password
+  redis_password:
+    file: ./secrets/redis_password

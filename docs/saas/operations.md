@@ -29,3 +29,30 @@ CREATE DATABASE mcp OWNER mcp_app;
 `npm test` поднимает временный кластер PostgreSQL (`initdb` во временном каталоге), если установлены бинарники
 PostgreSQL; иначе SaaS-тесты помечаются как пропущенные. Внешний сервер: `TEST_POSTGRES_ADMIN_URL=postgres://<админ>@<хост>/postgres`
 — тест создаёт отдельную базу и непривилегированную роль.
+
+## Кластер: Redis, worker, метрики (этап S8)
+
+Подробности и проверки — `docs/saas/s8-operations.md`; файлы развёртывания — `deploy/saas/`.
+
+- **Состав**: nginx (HTTPS, HSTS) → `web1`, `web2` → PostgreSQL 16 и Redis 7 во внутренней сети; `worker` ×1.
+  Запуск: `cd deploy/saas && cp saas.env.example saas.env && chmod 600 saas.env`, файлы секретов в `./secrets`
+  (`kek`, `pg_superuser_password`, `pg_app_password`, `pg_backup_password`, `redis_password`, права 600),
+  сертификаты в `./certs`, затем `docker compose up -d --build`.
+- **Redis** — с паролем (из файла секрета, не в аргументах процесса) и AOF (`appendfsync everysec`): счётчики учёта
+  переживают рестарт Redis. `REDIS_URL` — секрет. Без Redis лимитер портала работает на запасном локальном лимите,
+  блокировки и учёт недоступны — алерт `McpRedisErrors`.
+- **worker** — один активный в кластере по аренде в Redis; второй экземпляр ждёт и подхватывает при остановке лидера.
+  Остановка — SIGTERM: задачи получают abort, аренда снимается (`stop_grace_period` 40 с).
+- **Выкат без простоя**: миграции expand → migrate → contract; `docker compose up -d --no-deps web1`, дождаться healthy,
+  затем `web2`, затем `worker`. Откат — предыдущий образ + совместимая схема.
+- **Метрики** — `GET /metrics` на каждом экземпляре только во внутренней сети (nginx наружу не публикует); правила
+  алертов — `deploy/saas/prometheus-alerts.example.yml`.
+
+## Бэкапы PostgreSQL (SaaS)
+
+- Ежедневно `deploy/saas/pg-backup.sh` (cron): роль `mcp_backup` (только чтение + BYPASSRLS — иначе pg_dump не выгрузит
+  таблицы с FORCE RLS), подключение через переменные libpq и `PGPASSFILE`, шифрование **age** публичным ключом
+  (закрытый ключ — офлайн у владельца) или openssl, хранение 14 дней.
+- **KEK в копию не входит** и хранится отдельно; без KEK восстановленная база даёт метаданные, но не токены и планы.
+- Ежемесячно `deploy/saas/pg-restore-check.sh <копия>` на отдельном сервере: восстановление во временную базу, сверка
+  числа строк с файлом `.counts`, удаление временной базы. Результат записывается в журнал эксплуатации.
