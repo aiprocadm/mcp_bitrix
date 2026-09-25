@@ -154,6 +154,24 @@ export class OperationsStore {
     return rows.map(normalize).map(toView);
   }
 
+  /**
+   * История операций principal (кабинет SaaS, §11.1 п.4): статус, инструмент, цель, время — без плана и результата.
+   * Последние сначала; limit ограничен 1..500.
+   */
+  async listRecent(principalId: string, portalKey: string, limit: number): Promise<OperationView[]> {
+    const n = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = await this.q((x) =>
+      x.all<OperationRow>(
+        'SELECT * FROM operations WHERE tenant_id = ? AND principal_id = ? AND portal_key = ? ORDER BY created_at DESC, id LIMIT ?',
+        this.tenantId,
+        principalId,
+        portalKey,
+        n,
+      ),
+    );
+    return rows.map(normalize).map(toView);
+  }
+
   /** Все ожидающие решения операции портала — для панели владельца (любой principal арендатора). */
   async listPendingAll(portalKey: string): Promise<(OperationView & { principalId: string })[]> {
     const rows = await this.q((x) =>

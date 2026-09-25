@@ -331,6 +331,18 @@ export class FileStaging {
     return rows.length;
   }
 
+  /** Удаление всех подготовленных файлов арендатора (удаление данных арендатора, SaaS-ТЗ §14). */
+  async purgeAll(): Promise<number> {
+    const rows = await this.db.withTenant(this.tenantId, (x) =>
+      x.all<{ token: string; staging_path: string }>(
+        'SELECT token, staging_path FROM file_manifests WHERE tenant_id = ?',
+        this.tenantId,
+      ),
+    );
+    for (const r of rows) await this.remove(r.token, r.staging_path);
+    return rows.length;
+  }
+
   private async remove(token: string, stagingPath: string): Promise<void> {
     try {
       rmSync(stagingPath, { force: true });

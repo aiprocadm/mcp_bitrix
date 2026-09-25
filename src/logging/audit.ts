@@ -125,4 +125,28 @@ export class AuditLog {
       this.logger.warn({ reason: e instanceof Error ? e.name : 'unknown' }, 'audit cleanup failed');
     }
   }
+
+  /**
+   * Время последнего успешного вызова инструмента principal (кабинет SaaS: «Проверить подключение», §11.1 п.2).
+   * Записи служебных страниц (`excludeTools`, например сам кабинет) не считаются. Нет журнала — undefined.
+   */
+  async lastSuccessAt(
+    tenantId: string,
+    principalId: string,
+    excludeTools: readonly string[] = [],
+  ): Promise<{ ts: string; tool: string } | undefined> {
+    if (!this.enabled || !this.db) return undefined;
+    const excluded = excludeTools.filter((t) => /^[a-z0-9_]{1,64}$/.test(t));
+    const notIn = excluded.length ? ` AND tool NOT IN (${excluded.map(() => '?').join(', ')})` : '';
+    const row = await this.db.withTenant(tenantId, (x) =>
+      x.get<{ ts: string; tool: string }>(
+        `SELECT ts, tool FROM audit WHERE tenant_id = ? AND principal_hash = ? AND outcome = 'success' AND tool IS NOT NULL${notIn}
+         ORDER BY ts DESC LIMIT 1`,
+        tenantId,
+        this.alias(principalId),
+        ...excluded,
+      ),
+    );
+    return row ? { ts: row.ts, tool: row.tool } : undefined;
+  }
 }

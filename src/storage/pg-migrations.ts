@@ -32,6 +32,8 @@ export const RLS_TABLES = [
   'bitrix_tokens',
   'mcp_consents',
   'tenant_settings',
+  // S5 (миграция 50): сессии кабинета клиента.
+  'cabinet_sessions',
 ] as const;
 
 const rls = (table: string) => `
