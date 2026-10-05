@@ -37,6 +37,20 @@ describe('валидатор задач (ТЗ §9.8)', () => {
     expect(() => parseTaskFieldsResult({})).toThrow(AppError);
   });
 
+  it('создание: CREATED_BY помечен required, но портал ставит постановщика сам — не требуется', () => {
+    expect(meta['CREATED_BY']?.isRequired).toBe(true);
+    expect(validateTaskFieldsForWrite({ TITLE: 'x', RESPONSIBLE_ID: 7 }, meta)).toEqual({
+      TITLE: 'x',
+      RESPONSIBLE_ID: 7,
+    });
+    const strict = parseTaskFieldsResult({
+      fields: { ...TASK_FIELDS.fields, UF_PROJECT: { title: 'Проект', type: 'string', required: true } },
+    });
+    const e = errOf(() => validateTaskFieldsForWrite({ TITLE: 'x', RESPONSIBLE_ID: 7 }, strict));
+    expect(e.details['field']).toBe('UF_PROJECT');
+    expect(e.details['reason']).toBe('REQUIRED_FIELD_MISSING');
+  });
+
   it('запись: нормализация, неизвестные/серверные поля, обязательные', () => {
     const out = validateTaskFieldsForWrite(
       {

@@ -161,6 +161,13 @@ function normalizeValue(f: FieldMeta, v: unknown): JsonValue {
 }
 
 /**
+ * Поля, которые портал заполняет сам, если их не передать в tasks.task.add: постановщик = пользователь авторизации.
+ * Живой портал (2026-10-05) помечает CREATED_BY в tasks.task.getfields как required, а официальная страница
+ * tasks.task.add называет обязательными только TITLE и RESPONSIBLE_ID — без исключения task_create не работал.
+ */
+const DEFAULTED_ON_CREATE = new Set(['CREATED_BY']);
+
+/**
  * Проверка полей для tasks.task.add / tasks.task.update: только известные, не серверные; типы нормализуются.
  * В режиме 'update' обязательные поля не требуются (меняются только переданные).
  */
@@ -195,7 +202,7 @@ export function validateTaskFieldsForWrite(
   }
   if (mode === 'update') return out;
   for (const f of Object.values(meta)) {
-    if (f.isRequired && !f.isReadOnly && !(f.name in out)) {
+    if (f.isRequired && !f.isReadOnly && !DEFAULTED_ON_CREATE.has(f.name) && !(f.name in out)) {
       throw new AppError('VALIDATION_ERROR', `${f.name} («${f.title}»): обязательное поле не заполнено`, {
         field: f.name,
         reason: 'REQUIRED_FIELD_MISSING',
