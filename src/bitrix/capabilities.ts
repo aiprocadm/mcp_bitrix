@@ -26,6 +26,16 @@ interface ProbeResult {
 /** TTL кэша метаданных портала (Б§9.2: 5 минут). */
 export const CAPABILITIES_TTL_MS = 5 * 60_000;
 
+/**
+ * Методы, для которых `method.get` портала отвечает `isAvailable=false`, хотя вызов работает.
+ * Живой портал (облако, 2026-10-05, вебхук со scope `task`): все семь legacy `tasks.task.*`
+ * из реестра — false, а `tasks.task.list`/`getfields` отдают данные; `task.checklistitem.*`,
+ * `task.commentitem.*` и методы других модулей — true. Для них доступность решает выданный scope.
+ */
+export function methodGetUnreliable(descriptor: MethodDescriptor): boolean {
+  return descriptor.apiVersion === 'legacy' && /^tasks\.task\.[a-z]+$/.test(descriptor.method);
+}
+
 export class CapabilityService {
   constructor(
     private readonly cache: MemoryTtlCache,
@@ -109,6 +119,35 @@ export class CapabilityService {
         status: 'unavailable',
         reason: 'метод отсутствует на портале',
       };
+    if (!probe.isAvailable && methodGetUnreliable(descriptor) && descriptor.scope) {
+      let granted: string[];
+      try {
+        granted = await this.scopes(requestId, refresh);
+      } catch (e) {
+        return {
+          method: descriptor.method,
+          apiVersion: 'legacy',
+          scope: descriptor.scope,
+          status: 'error',
+          reason: AppError.from(e).code,
+        };
+      }
+      if (granted.includes(descriptor.scope))
+        return {
+          method: descriptor.method,
+          apiVersion: 'legacy',
+          scope: descriptor.scope,
+          status: 'supported',
+          reason: `method.get портала отвечает «недоступен» для tasks.task.*; scope ${descriptor.scope} выдан`,
+        };
+      return {
+        method: descriptor.method,
+        apiVersion: 'legacy',
+        scope: descriptor.scope,
+        status: 'unavailable',
+        reason: `нет scope ${descriptor.scope}`,
+      };
+    }
     if (!probe.isAvailable)
       return {
         method: descriptor.method,
