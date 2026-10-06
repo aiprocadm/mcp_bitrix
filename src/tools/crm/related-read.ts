@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { ok } from '../../mcp/result.js';
+import { htmlToText } from '../feed/sanitize.js';
 import { pageArgsShape } from '../../schemas/common.js';
 import { defineTool, READ_ANNOTATIONS, type ToolContext } from '../types.js';
 import { asText } from './deal-fields.js';
@@ -32,6 +33,30 @@ const isoDate = z
     (s) => !Number.isNaN(Date.parse(s)),
     'ожидается дата ISO 8601, например 2026-09-01 или 2026-09-01T00:00:00+03:00',
   );
+
+/** TYPE_ID дел CRM: 1 — встреча, 2 — звонок, 3 — задача (старый тип), 4 — письмо. */
+const ACTIVITY_TYPE_IDS = { meeting: 1, call: 2, task: 3, email: 4 } as const;
+
+/**
+ * Текст дела для ответа: DESCRIPTION_TYPE=3 — HTML (письма), переводится в обычный текст; длинный обрезается.
+ * Живой портал (2026-10-06): тела писем — HTML до 20 КБ, массив FILES в списке пуст.
+ */
+export function withPlainDescription(
+  item: Record<string, unknown>,
+  maxChars: number,
+): Record<string, unknown> {
+  const raw = asText(item['DESCRIPTION']);
+  const text = asText(item['DESCRIPTION_TYPE']) === '3' ? htmlToText(raw) : raw;
+  const out: Record<string, unknown> = {
+    ...item,
+    DESCRIPTION: text.length > maxChars ? text.slice(0, maxChars) : text,
+  };
+  if (text.length > maxChars) {
+    out['DESCRIPTION_TRUNCATED'] = true;
+    out['DESCRIPTION_LENGTH'] = text.length;
+  }
+  return out;
+}
 
 function pageSizeOf(ctx: ToolContext, requested: number | undefined): number {
   return Math.min(requested ?? ctx.config.limits.defaultPageSize, ctx.config.limits.maxPageSize);
@@ -211,8 +236,10 @@ export const crmActivitiesListTool = defineTool({
   title: 'Дела записи CRM',
   description:
     'Дела (звонки, встречи, письма, задачи CRM) по записи: тема, тип, ответственный, сроки, выполнено ли. ' +
-    'Использовать, когда спрашивают «какие дела по сделке/клиенту», «что просрочено». completed фильтрует выполненные/открытые. ' +
-    'Контакты участников и вложения не отдаются; описание — только при includeDescription=true. До 50 дел на страницу, продолжение — по cursor.',
+    'Использовать, когда спрашивают «какие дела по сделке/клиенту», «что просрочено», «о чём переписка с клиентом». ' +
+    'completed фильтрует выполненные/открытые, kind — вид дела (email — письма). ' +
+    'includeDescription=true добавляет текст (у писем — тело письма, HTML переводится в обычный текст и обрезается до descriptionMaxChars). ' +
+    'Контакты участников и вложения не отдаются. До 50 дел на страницу, продолжение — по cursor.',
   operation: 'read',
   annotations: READ_ANNOTATIONS,
   requiresBitrix: true,
@@ -221,7 +248,23 @@ export const crmActivitiesListTool = defineTool({
       entityType: entityTypeSchema,
       recordId: recordId.describe('ID записи-владельца дел'),
       completed: z.boolean().optional().describe('true — только выполненные, false — только открытые'),
-      includeDescription: z.boolean().default(false).describe('Добавить текст описания дела'),
+      kind: z
+        .enum(['email', 'call', 'meeting', 'task'])
+        .optional()
+        .describe(
+          'Вид дела: email — письма, call — звонки, meeting — встречи, task — задачи CRM (старый тип)',
+        ),
+      includeDescription: z
+        .boolean()
+        .default(false)
+        .describe('Добавить текст описания дела (у писем — тело письма)'),
+      descriptionMaxChars: z
+        .number()
+        .int()
+        .min(200)
+        .max(20_000)
+        .default(3000)
+        .describe('Предел длины текста одного дела; длиннее — обрезается с DESCRIPTION_TRUNCATED=true'),
       ...pageArgsShape,
     })
     .strict(),
@@ -236,6 +279,7 @@ export const crmActivitiesListTool = defineTool({
     const page = await activitiesPage(ctx, entity, {
       recordId: args.recordId,
       completed: args.completed,
+      typeId: args.kind === undefined ? undefined : ACTIVITY_TYPE_IDS[args.kind],
       includeDescription: args.includeDescription,
       pageSize: pageSizeOf(ctx, args.pageSize),
       cursor: args.cursor,
@@ -244,7 +288,9 @@ export const crmActivitiesListTool = defineTool({
       {
         entityType: entity.type,
         recordId: args.recordId,
-        items: page.items as Record<string, unknown>[],
+        items: (page.items as Record<string, unknown>[]).map((it) =>
+          args.includeDescription ? withPlainDescription(it, args.descriptionMaxChars) : it,
+        ),
         returnedCount: page.items.length,
       },
       pageMeta(ctx, 'crm.activity.list', page),

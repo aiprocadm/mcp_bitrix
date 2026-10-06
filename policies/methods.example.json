@@ -216,6 +216,18 @@
     {
       "apiVersion": "v3",
       "method": "note.document.tree.list"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.deal.contact.items.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.contact.company.items.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "crm.status.get"
     }
   ]
 }

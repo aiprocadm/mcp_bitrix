@@ -18,10 +18,10 @@ export const crmListRecordsTool = defineTool({
   module: 'crm',
   title: 'Список записей CRM',
   description:
-    'Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета) с фильтром, сортировкой и выбором полей. ' +
+    'Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета, коммерческие предложения) с фильтром, сортировкой и выбором полей. ' +
     'Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. ' +
     'Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {">=DATE_CREATE": "2026-09-01", "%TITLE": "договор"}. ' +
-    'smart (нужен entityTypeId) и invoice идут через crm.item.list: поля camelCase, например {">=createdTime": "2026-09-01", "%title": "договор"}; регистр автоматически не переводится. ' +
+    'smart (нужен entityTypeId), invoice и quote идут через crm.item.list: поля camelCase, например {">=createdTime": "2026-09-01", "%title": "договор"}; регистр автоматически не переводится. ' +
     'Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа.',
   operation: 'read',
   annotations: READ_ANNOTATIONS,
@@ -38,7 +38,7 @@ export const crmListRecordsTool = defineTool({
         .record(z.string().max(100), z.enum(['ASC', 'DESC', 'asc', 'desc']))
         .optional()
         .describe(
-          'Сортировка, например {"DATE_CREATE": "DESC"} (smart/invoice: {"createdTime": "DESC"}); по умолчанию ID по убыванию',
+          'Сортировка, например {"DATE_CREATE": "DESC"} (smart/invoice/quote: {"createdTime": "DESC"}); по умолчанию ID по убыванию',
         ),
       select: z
         .array(z.string().max(100))

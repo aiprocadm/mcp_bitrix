@@ -32,7 +32,7 @@ export const crmFieldsSchema = z
   .record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,99}$/, 'имя поля: буквы, цифры, _'), crmFieldValue)
   .describe(
     'Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР (TITLE, UF_CRM_*); ' +
-      'smart/invoice (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится',
+      'smart/invoice/quote (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится',
   );
 
 function createRisks(entity: ClassicEntity, fields: Record<string, unknown>): string[] {
@@ -60,7 +60,7 @@ export const crmCreateRecordTool = defineTool({
   title: 'Создать запись CRM',
   description:
     'Создать запись CRM: сделку, лид, контакт, компанию (crm.<entity>.add, поля ВЕРХНИЙ_РЕГИСТР) либо элемент смарт-процесса ' +
-    '(entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.add (поля camelCase). Поля проверяются по схеме портала ' +
+    '(entityType=smart + entityTypeId) , новый счёт (invoice) или коммерческое предложение (quote) через crm.item.add (поля camelCase). Поля проверяются по схеме портала ' +
     '(crm_fields_get): неизвестные и read-only отклоняются, обязательные должны быть заполнены, стадия/статус — по справочнику. ' +
     'Использовать, когда пользователь явно просит создать запись. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED ' +
     'с operationId и планом — запись ещё не сделана; человек подтверждает план (CLI или панель); повторный вызов с теми же ' +

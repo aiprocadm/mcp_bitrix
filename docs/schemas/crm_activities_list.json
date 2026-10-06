@@ -1,7 +1,7 @@
 {
   "name": "crm_activities_list",
   "title": "Дела записи CRM",
-  "description": "Дела (звонки, встречи, письма, задачи CRM) по записи: тема, тип, ответственный, сроки, выполнено ли. Использовать, когда спрашивают «какие дела по сделке/клиенту», «что просрочено». completed фильтрует выполненные/открытые. Контакты участников и вложения не отдаются; описание — только при includeDescription=true. До 50 дел на страницу, продолжение — по cursor.",
+  "description": "Дела (звонки, встречи, письма, задачи CRM) по записи: тема, тип, ответственный, сроки, выполнено ли. Использовать, когда спрашивают «какие дела по сделке/клиенту», «что просрочено», «о чём переписка с клиентом». completed фильтрует выполненные/открытые, kind — вид дела (email — письма). includeDescription=true добавляет текст (у писем — тело письма, HTML переводится в обычный текст и обрезается до descriptionMaxChars). Контакты участников и вложения не отдаются. До 50 дел на страницу, продолжение — по cursor.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -32,10 +32,27 @@
         "description": "true — только выполненные, false — только открытые",
         "type": "boolean"
       },
+      "kind": {
+        "description": "Вид дела: email — письма, call — звонки, meeting — встречи, task — задачи CRM (старый тип)",
+        "type": "string",
+        "enum": [
+          "email",
+          "call",
+          "meeting",
+          "task"
+        ]
+      },
       "includeDescription": {
         "default": false,
-        "description": "Добавить текст описания дела",
+        "description": "Добавить текст описания дела (у писем — тело письма)",
         "type": "boolean"
+      },
+      "descriptionMaxChars": {
+        "default": 3000,
+        "description": "Предел длины текста одного дела; длиннее — обрезается с DESCRIPTION_TRUNCATED=true",
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 20000
       },
       "pageSize": {
         "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
@@ -53,7 +70,8 @@
     "required": [
       "entityType",
       "recordId",
-      "includeDescription"
+      "includeDescription",
+      "descriptionMaxChars"
     ],
     "additionalProperties": false
   },
@@ -216,6 +234,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

@@ -64,7 +64,8 @@ function bad(field: string, message: string, reason?: string): AppError {
   return new AppError('VALIDATION_ERROR', `${field}: ${message}`, {
     field,
     ...(reason ? { reason } : {}),
-    nextAction: 'Сверьтесь со схемой полей: crm_fields_get (entityType smart/invoice) — имена в camelCase',
+    nextAction:
+      'Сверьтесь со схемой полей: crm_fields_get (entityType smart/invoice/quote) — имена в camelCase',
   });
 }
 

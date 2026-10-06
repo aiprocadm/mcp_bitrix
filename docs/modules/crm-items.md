@@ -22,8 +22,10 @@
 | `invoice_stages_list`       | invoices       | read     | `crm.category.list` (entityTypeId=31), `crm.status.list` (`SMART_INVOICE_STAGE_{categoryId}`)                                                                                    |
 | `crm_delete_record`         | crm            | delete   | `crm.<entity>.get/.delete` или `crm.item.get/.delete`; impact: `crm.activity.list`, `crm.timeline.comment.list`, `crm.item.productrow.list`, `crm.deal.list`, `crm.contact.list` |
 
-Расширены (entityType += `smart` | `invoice`, `entityTypeId?`): `crm_list_records`, `crm_get_record`,
-`crm_create_record`, `crm_update_record`, `crm_fields_get`. Для `smart` `entityTypeId` обязателен
+Расширены (entityType += `smart` | `invoice` | `quote`, `entityTypeId?`): `crm_list_records`, `crm_get_record`,
+`crm_create_record`, `crm_update_record`, `crm_fields_get`. `quote` — коммерческое предложение (entityTypeId=7,
+2026-10-06 по живому порталу): воронок нет (`crm.category.list` отвечает `ENTITY_TYPE_NOT_SUPPORTED`), стадии — один
+справочник `QUOTE_STATUS`, товарные строки — ownerType `Q`; создание показывает риск «печатная форма и отправка не выполняются». Для `smart` `entityTypeId` обязателен
 (`VALIDATION_ERROR`, reason `ENTITY_TYPE_ID_REQUIRED`), для классических сущностей запрещён
 (`UNEXPECTED_ENTITY_TYPE_ID`), для `invoice` допустим только 31.
 

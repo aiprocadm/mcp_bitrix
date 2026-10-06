@@ -193,6 +193,7 @@ export async function activitiesPage(
   args: {
     recordId: number;
     completed: boolean | undefined;
+    typeId?: number | undefined;
     includeDescription: boolean;
     pageSize: number;
     cursor: string | undefined;
@@ -200,9 +201,10 @@ export async function activitiesPage(
 ): Promise<PageResult> {
   const filter: JsonObject = { OWNER_TYPE_ID: entity.entityTypeId, OWNER_ID: args.recordId };
   if (args.completed !== undefined) filter['COMPLETED'] = args.completed ? 'Y' : 'N';
+  if (args.typeId !== undefined) filter['TYPE_ID'] = args.typeId;
   // COMMUNICATIONS (телефоны/email участников) и FILES намеренно не запрашиваются: минимум персональных данных (§8.4).
   const select: string[] = [...ACTIVITY_FIELDS];
-  if (args.includeDescription) select.push('DESCRIPTION');
+  if (args.includeDescription) select.push('DESCRIPTION', 'DESCRIPTION_TYPE');
   return paginateLegacy({
     store: ctx.cursors,
     binding: binding(ctx, 'crm_activities_list', {

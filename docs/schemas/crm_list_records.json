@@ -1,7 +1,7 @@
 {
   "name": "crm_list_records",
   "title": "Список записей CRM",
-  "description": "Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {\">=DATE_CREATE\": \"2026-09-01\", \"%TITLE\": \"договор\"}. smart (нужен entityTypeId) и invoice идут через crm.item.list: поля camelCase, например {\">=createdTime\": \"2026-09-01\", \"%title\": \"договор\"}; регистр автоматически не переводится. Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа.",
+  "description": "Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета, коммерческие предложения) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {\">=DATE_CREATE\": \"2026-09-01\", \"%TITLE\": \"договор\"}. smart (нужен entityTypeId), invoice и quote идут через crm.item.list: поля camelCase, например {\">=createdTime\": \"2026-09-01\", \"%title\": \"договор\"}; регистр автоматически не переводится. Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -20,9 +20,10 @@
           "contact",
           "company",
           "smart",
-          "invoice"
+          "invoice",
+          "quote"
         ],
-        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
       },
       "entityTypeId": {
         "type": "integer",
@@ -76,7 +77,7 @@
         }
       },
       "order": {
-        "description": "Сортировка, например {\"DATE_CREATE\": \"DESC\"} (smart/invoice: {\"createdTime\": \"DESC\"}); по умолчанию ID по убыванию",
+        "description": "Сортировка, например {\"DATE_CREATE\": \"DESC\"} (smart/invoice/quote: {\"createdTime\": \"DESC\"}); по умолчанию ID по убыванию",
         "type": "object",
         "propertyNames": {
           "type": "string",
@@ -141,9 +142,10 @@
                   "contact",
                   "company",
                   "smart",
-                  "invoice"
+                  "invoice",
+                  "quote"
                 ],
-                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
               },
               "entityTypeId": {
                 "type": "number"
@@ -283,6 +285,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

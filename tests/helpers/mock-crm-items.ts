@@ -125,6 +125,23 @@ export const INVOICE_FIELDS = {
   updatedTime: F('datetime', 'Изменён', { isReadOnly: true }),
 };
 
+/** Коммерческое предложение (entityTypeId=7) как на живом портале 2026-10-06: без categoryId, стадии QUOTE_STATUS. */
+export const QUOTE_FIELDS = {
+  id: F('integer', 'ID', { isReadOnly: true }),
+  title: F('string', 'Название'),
+  quoteNumber: F('string', 'Номер', { isReadOnly: true }),
+  stageId: F('crm_status', 'Стадия'),
+  assignedById: F('user', 'Ответственный'),
+  opened: F('boolean', 'Доступен для всех', { isRequired: true }),
+  opportunity: F('double', 'Сумма'),
+  currencyId: F('crm_currency', 'Валюта'),
+  companyId: F('crm_company', 'Компания'),
+  dealId: F('crm_deal', 'Сделка'),
+  closedate: F('date', 'Действительно до'),
+  createdTime: F('datetime', 'Создан', { isReadOnly: true }),
+  updatedTime: F('datetime', 'Изменён', { isReadOnly: true }),
+};
+
 export const ITEM_CATEGORIES: Record<number, unknown[]> = {
   1256: [
     { id: 7, name: 'Основная', sort: 100, entityTypeId: 1256, isDefault: 'Y' },
@@ -150,6 +167,12 @@ export const ITEM_STATUSES: Record<string, unknown[]> = {
     S('DYNAMIC_1256_STAGE_7', 'DT1256_7:SUCCESS', 'Успех', 30, 'S'),
   ],
   DYNAMIC_1256_STAGE_8: [S('DYNAMIC_1256_STAGE_8', 'DT1256_8:NEW', 'Новый', 10)],
+  QUOTE_STATUS: [
+    S('QUOTE_STATUS', 'DRAFT', 'Новое', 10),
+    S('QUOTE_STATUS', 'SENT', 'Отправлено клиенту', 20),
+    S('QUOTE_STATUS', 'APPROVED', 'Принято', 30, 'S'),
+    S('QUOTE_STATUS', 'DECLAINED', 'Отклонено', 40, 'F'),
+  ],
   SMART_INVOICE_STAGE_2: [
     S('SMART_INVOICE_STAGE_2', 'DT31_2:N', 'Новый', 10),
     S('SMART_INVOICE_STAGE_2', 'DT31_2:S', 'Отправлен', 20),
@@ -196,6 +219,24 @@ export function invoiceItem(id: number, overrides: Record<string, unknown> = {})
   };
 }
 
+export function quoteItem(id: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id,
+    title: `[MCP TEST] КП ${String(id)}`,
+    quoteNumber: String(id),
+    stageId: 'DRAFT',
+    assignedById: 7,
+    opened: 'Y',
+    opportunity: 16320,
+    currencyId: 'RUB',
+    companyId: 5,
+    dealId: 5,
+    createdTime: '2026-09-20T10:00:00+03:00',
+    updatedTime: '2026-09-20T10:00:00+03:00',
+    ...overrides,
+  };
+}
+
 export interface ItemsStore {
   items: Record<number, Map<number, Record<string, unknown>>>;
   rows: Map<string, Record<string, unknown>[]>;
@@ -214,12 +255,18 @@ export function mockCrmItems(bitrix: MockBitrix, extraStatuses: Record<string, u
       1256: new Map(Array.from({ length: 60 }, (_, i) => [i + 1, smartItem(i + 1)])),
       1246: new Map(),
       31: new Map([[40, invoiceItem(40)]]),
+      7: new Map([[29, quoteItem(29)]]),
     },
     rows: new Map(),
     nextId: 500,
     rowsSetFailure: undefined,
   };
-  const fieldsFor: Record<number, unknown> = { 1256: SMART_FIELDS, 1246: SMART_FIELDS, 31: INVOICE_FIELDS };
+  const fieldsFor: Record<number, unknown> = {
+    1256: SMART_FIELDS,
+    1246: SMART_FIELDS,
+    31: INVOICE_FIELDS,
+    7: QUOTE_FIELDS,
+  };
   const statuses = { ...ITEM_STATUSES, ...extraStatuses };
   bitrix
     .on('crm.type.list', (c) => {
@@ -252,7 +299,7 @@ export function mockCrmItems(bitrix: MockBitrix, extraStatuses: Record<string, u
     .on('crm.item.add', (c) => {
       const id = store.nextId++;
       const etid = etidOf(c);
-      const base = etid === 31 ? invoiceItem(id) : smartItem(id);
+      const base = etid === 31 ? invoiceItem(id) : etid === 7 ? quoteItem(id) : smartItem(id);
       const item = { ...base, ...(body(c)['fields'] as Record<string, unknown>), id };
       store.items[etid]?.set(id, item);
       return legacyOk({ item });
@@ -294,7 +341,12 @@ export function mockCrmItems(bitrix: MockBitrix, extraStatuses: Record<string, u
       store.rows.set(`${String(body(c)['ownerType'])}:${String(body(c)['ownerId'])}`, saved);
       return legacyOk({ productRows: saved });
     })
-    .on('crm.category.list', (c) => legacyOk({ categories: ITEM_CATEGORIES[etidOf(c)] ?? [] }))
+    // Живой портал: у КП воронок нет — crm.category.list(7) отвечает ENTITY_TYPE_NOT_SUPPORTED.
+    .on('crm.category.list', (c) =>
+      etidOf(c) === 7
+        ? legacyError('ENTITY_TYPE_NOT_SUPPORTED', 400, 'Сущность CRM Предложение не поддерживается')
+        : legacyOk({ categories: ITEM_CATEGORIES[etidOf(c)] ?? [] }),
+    )
     .on('crm.status.list', (c) => {
       const entityId = ((body(c)['filter'] ?? {}) as Record<string, unknown>)['ENTITY_ID'];
       return legacyOk(typeof entityId === 'string' ? (statuses[entityId] ?? []) : []);

@@ -32,7 +32,7 @@ const includeSchema = z
   .optional()
   .describe(
     'Связанные блоки, каждый со своим лимитом и completeness: activities (до 10 дел), comments (до 10 комментариев таймлайна, ' +
-      'только классические сущности), products (до 20 товарных позиций: сделка, лид, smart, invoice). Полные списки — отдельные инструменты',
+      'только классические сущности), products (до 20 товарных позиций: сделка, лид, smart, invoice, quote). Полные списки — отдельные инструменты',
   );
 
 const blockSchema = z.object({
@@ -73,14 +73,17 @@ function unsupported(kind: IncludeKind, what: string): never {
 function assertIncludeSupported(target: RecordTarget, include: readonly IncludeKind[]): void {
   for (const kind of include) {
     if (kind === 'comments' && target.kind === 'item')
-      unsupported(kind, 'smart/invoice в этом срезе (ENTITY_TYPE комментариев для crm.item не сверен)');
+      unsupported(kind, 'smart/invoice/quote в этом срезе (ENTITY_TYPE комментариев для crm.item не сверен)');
     if (
       kind === 'products' &&
       target.kind === 'classic' &&
       target.entity.type !== 'deal' &&
       target.entity.type !== 'lead'
     )
-      unsupported(kind, `${target.entity.type}: товарные позиции есть у сделки, лида, smart и invoice`);
+      unsupported(
+        kind,
+        `${target.entity.type}: товарные позиции есть у сделки, лида, smart, invoice и quote`,
+      );
   }
 }
 
@@ -107,7 +110,7 @@ async function loadBlock(
     return block(page.items, page.hasMore, 'crm.activity.list');
   }
   if (kind === 'comments') {
-    if (target.kind !== 'classic') unsupported(kind, 'smart/invoice');
+    if (target.kind !== 'classic') unsupported(kind, 'smart/invoice/quote');
     const page = await commentsPage(ctx, target.entity, { recordId: id, pageSize: limit, cursor: undefined });
     const items = page.items.map((x: JsonValue) => normalizeComment(x)).filter((x) => x !== undefined);
     return block(items, page.hasMore, 'crm.timeline.comment.list', rest('crm_timeline_comments_list'));
@@ -128,7 +131,7 @@ export const crmGetRecordTool = defineTool({
   title: 'Карточка записи CRM',
   description:
     'Карточка записи CRM по ID в рамках доступных полей: сделка, лид, контакт, компания (crm.<entity>.get, поля ВЕРХНИЙ_РЕГИСТР), ' +
-    'элемент смарт-процесса (entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.get (поля camelCase). ' +
+    'элемент смарт-процесса (entityType=smart + entityTypeId) , новый счёт (invoice) или коммерческое предложение (quote) через crm.item.get (поля camelCase). ' +
     'Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для expectedStateHash в crm_update_record/crm_delete_record. ' +
     'include добавляет небольшие связанные блоки (дела, комментарии, товары) с отдельными лимитами и полнотой; бинарные вложения не скачиваются.',
   operation: 'read',

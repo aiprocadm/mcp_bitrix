@@ -1,7 +1,7 @@
 {
   "name": "crm_update_record",
   "title": "Изменить запись CRM",
-  "description": "Изменить поля записи CRM: сделка, лид, контакт, компания (crm.<entity>.update, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.update (поля camelCase). Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (diff «было → станет»); человек подтверждает; повторный вызов с теми же параметрами и approvalId применяет изменение один раз.",
+  "description": "Изменить поля записи CRM: сделка, лид, контакт, компания (crm.<entity>.update, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) , новый счёт (invoice) или коммерческое предложение (quote) через crm.item.update (поля camelCase). Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом (diff «было → станет»); человек подтверждает; повторный вызов с теми же параметрами и approvalId применяет изменение один раз.",
   "annotations": {
     "readOnlyHint": false,
     "destructiveHint": false,
@@ -20,9 +20,10 @@
           "contact",
           "company",
           "smart",
-          "invoice"
+          "invoice",
+          "quote"
         ],
-        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
       },
       "entityTypeId": {
         "type": "integer",
@@ -97,7 +98,7 @@
             }
           ]
         },
-        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР (TITLE, UF_CRM_*); smart/invoice (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится"
+        "description": "Поля по схеме портала (crm_fields_get): классический CRM — ВЕРХНИЙ_РЕГИСТР (TITLE, UF_CRM_*); smart/invoice/quote (crm.item.*) — camelCase (title, stageId, ufCrm5_…). Регистр автоматически не переводится"
       },
       "dryRun": {
         "default": false,
@@ -151,9 +152,10 @@
                   "contact",
                   "company",
                   "smart",
-                  "invoice"
+                  "invoice",
+                  "quote"
                 ],
-                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
               },
               "entityTypeId": {
                 "type": "number"
@@ -310,6 +312,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

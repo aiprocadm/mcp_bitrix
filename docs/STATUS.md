@@ -33,6 +33,15 @@
 | 13  | Полная версия              | ✅ 25.09 | срезы 10–11 (классический CRM, связанные данные) + срез 12: все модули §9.2–9.14 — `docs/modules/*.md`                                                                                                                                                                           |
 | 14  | Destructive-функции        | ✅ 25.09 | 6 delete-инструментов (`crm_delete_record`, `task_delete`, `task_checklist_delete`, `calendar_delete_event`, `company_department_delete`, `disk_delete_file`): impact в плане, CONFLICT, verify по отсутствию; скрыты без `ENABLE_DESTRUCTIVE_TOOLS`, только administrator       |
 
+## Что именно сделано (2026-10-06 — по заданию владельца с живого портала)
+
+- Связи CRM: `crm_deal_contacts_list`, `crm_deal_contact_add`, `crm_contact_companies_list`, `crm_contact_company_add`;
+  справочники: `crm_status_create`, `crm_status_update` (без удаления); `crm_pipelines_overview` — все воронки сделок
+  за один проход и лиды по стадиям/источникам; коммерческие предложения `entityType=quote` в `crm_*` (crm.item.*, тип 7,
+  стадии `QUOTE_STATUS`, воронок нет); `crm_activities_list` — `kind` (письма) и тело письма обычным текстом.
+- Общая правка: пустой код ошибки с «Not found.» → `NOT_FOUND`.
+- Подробности, отказы (event.get, роботы, вложения писем) и проверки — `docs/modules/crm-links.md`. 112 инструментов.
+
 ## Что именно сделано (срез 13 — улучшения после ревью безопасности)
 
 - **§8.2 п.4 в ядре**: MutationExecutor при повторе с `approvalId` сверяет пересчитанный план с подтверждённым (действие, цель, детали; риски не входят). Расхождение → `CONFLICT` с `reason=PLAN_CHANGED`, операция `failed`, записи нет — даже без `expectedStateHash`. Закрыло класс «исполняется не то, что показано»: `catalog_price_set` (план «создать», а цену успели создать), `calendar_update_event` (пересчитанные `to_ts`/участники), `company_department_update`.

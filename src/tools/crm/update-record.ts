@@ -52,7 +52,7 @@ export const crmUpdateRecordTool = defineTool({
   title: 'Изменить запись CRM',
   description:
     'Изменить поля записи CRM: сделка, лид, контакт, компания (crm.<entity>.update, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса ' +
-    '(entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.update (поля camelCase). ' +
+    '(entityType=smart + entityTypeId) , новый счёт (invoice) или коммерческое предложение (quote) через crm.item.update (поля camelCase). ' +
     'Использовать, когда пользователь явно просит изменить конкретные поля существующей записи; передавайте только изменяемые поля. ' +
     'Рекомендуется expectedStateHash из crm_get_record: при изменении записи кем-то ещё будет CONFLICT, а не тихая перезапись. ' +
     'Стадия/статус проверяются по справочнику портала. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом ' +

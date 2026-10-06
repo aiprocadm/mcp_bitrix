@@ -1,0 +1,463 @@
+{
+  "name": "crm_pipelines_overview",
+  "title": "Сводка по всем воронкам или по лидам",
+  "description": "entityType=deal — количество и суммы сделок по КАЖДОЙ воронке и её стадиям за период (выиграно/проиграно/в работе); entityType=lead — лиды по стадиям и по источникам (откуда пришли). Использовать для вопросов «как дела во всех воронках», «сколько лидов за месяц и откуда», «сколько лидов провалено». Одна воронка подробно — crm_pipeline_summary. Считается по ограниченной выборке (maxRecords, лимит времени): ответ сообщает scannedCount, hasMore и полноту — сужайте период. Суммы в разных валютах не складываются. Это снимок текущих стадий, не историческая конверсия.",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "entityType": {
+        "type": "string",
+        "enum": [
+          "deal",
+          "lead"
+        ],
+        "description": "deal — все воронки сделок, lead — лиды"
+      },
+      "dateField": {
+        "default": "DATE_CREATE",
+        "description": "Поле даты периода: сделки — DATE_CREATE/CLOSEDATE/BEGINDATE/DATE_MODIFY, лиды — DATE_CREATE/DATE_MODIFY/DATE_CLOSED",
+        "type": "string",
+        "enum": [
+          "DATE_CREATE",
+          "CLOSEDATE",
+          "BEGINDATE",
+          "DATE_MODIFY",
+          "DATE_CLOSED"
+        ]
+      },
+      "from": {
+        "type": "string",
+        "maxLength": 40,
+        "description": "Начало периода (включительно)"
+      },
+      "to": {
+        "type": "string",
+        "maxLength": 40,
+        "description": "Конец периода (включительно)"
+      },
+      "assignedById": {
+        "description": "Только этого ответственного",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "maxRecords": {
+        "description": "Предел просмотренных записей; по умолчанию MAX_AGGREGATION_RECORDS",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50000
+      }
+    },
+    "required": [
+      "entityType",
+      "dateField",
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "enum": [
+                  "deal",
+                  "lead"
+                ]
+              },
+              "dateField": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "assignedById": {
+                "type": "number"
+              },
+              "asOf": {
+                "type": "string"
+              },
+              "scannedCount": {
+                "type": "number"
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "stoppedBy": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "maxRecords",
+                  "timeLimit"
+                ]
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "categoryId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "number"
+                    },
+                    "sums": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "currency": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "currency",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "won": {
+                      "type": "number"
+                    },
+                    "lost": {
+                      "type": "number"
+                    },
+                    "inProgress": {
+                      "type": "number"
+                    },
+                    "stages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stageId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "semantics": {
+                            "type": "string",
+                            "enum": [
+                              "P",
+                              "S",
+                              "F"
+                            ]
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "sums": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "currency": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "currency",
+                                "amount"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "stageId",
+                          "name",
+                          "semantics",
+                          "count",
+                          "sums"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "categoryId",
+                    "name",
+                    "count",
+                    "sums",
+                    "won",
+                    "lost",
+                    "inProgress",
+                    "stages"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "name",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "totals": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "number"
+                  },
+                  "sums": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "currency": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "currency",
+                        "amount"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "sums"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "entityType",
+              "dateField",
+              "from",
+              "to",
+              "asOf",
+              "scannedCount",
+              "hasMore",
+              "stoppedBy",
+              "groups",
+              "totals"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}
