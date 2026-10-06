@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "lists_list",
+  "title": "Универсальные списки",
+  "description": "Перечень универсальных списков портала (lists.get): ID, название, код, описание. Использовать, когда спрашивают «какие у нас списки/реестры», перед чтением элементов списка.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,37 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "iblockType": {
+        "default": "lists",
+        "description": "Тип: lists — универсальные списки, bitrix_processes — процессы, lists_socnet — списки групп",
         "type": "string",
         "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
+          "lists",
+          "bitrix_processes",
+          "lists_socnet"
         ]
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
+      "socnetGroupId": {
+        "description": "Для lists_socnet: ID рабочей группы (обязателен)",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
       },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "pageSize": {
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       }
     },
     "required": [
-      "refresh"
+      "iblockType"
     ],
     "additionalProperties": false
   },
@@ -75,54 +64,39 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "name": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
+                    "code": {
                       "type": "string"
                     },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
+                    "description": {
                       "type": "string"
+                    },
+                    "active": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "id",
+                    "name",
+                    "code",
+                    "description",
+                    "active"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

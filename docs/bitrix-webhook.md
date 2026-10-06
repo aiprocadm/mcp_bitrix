@@ -14,7 +14,7 @@
 
    | Модуль `ENABLED_MODULES`            | Scope вебхука                                                                                                                                                                          |
    | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `crm`, `smartProcesses`, `invoices` | `crm`                                                                                                                                                                                  |
+   | `crm`, `smartProcesses`, `invoices` | `crm` (в т. ч. генератор документов `crm.documentgenerator.*`)                                                                                                                         |
    | `tasks`                             | `task`; для новой карточки (REST 3.0: `tasks.task.get` v3, `tasks.task.chat.message.send`) страницы методов указывают scope `tasks` — сверить на портале; чтение обсуждения — ещё `im` |
    | `chat`                              | `im`                                                                                                                                                                                   |
    | `calendar`                          | `calendar`                                                                                                                                                                             |
@@ -26,6 +26,8 @@
    | `orders`                            | `sale`                                                                                                                                                                                 |
    | `feed`                              | `log`                                                                                                                                                                                  |
    | `knowledgeBase`                     | `landing` (классическая база), `note` (база знаний 2.0, REST 3.0)                                                                                                                      |
+   | `openlines`                         | `imopenlines` (чтение переписки открытых линий)                                                                                                                                        |
+   | `lists`                             | `lists` (чтение универсальных списков)                                                                                                                                                 |
 
    `npm run doctor` и `bitrix_capabilities` покажут, каких прав не хватает.
 

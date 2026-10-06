@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "crm_documents_list",
+  "title": "Документы записи CRM",
+  "description": "Документы, сформированные генератором по записи CRM (договоры, счета, КП): ID, название, номер, шаблон, дата, готов ли PDF. Использовать, когда спрашивают «какие документы уже сделаны по сделке», «есть ли договор». Ссылки на файлы не отдаются — документ открывается в карточке записи.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,40 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "entityType": {
         "type": "string",
         "enum": [
-          "system",
+          "deal",
+          "lead",
+          "contact",
           "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
-        ]
+          "quote",
+          "invoice"
+        ],
+        "description": "Запись CRM: deal, lead, contact, company, quote (КП), invoice (новый счёт)"
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
+      "recordId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID записи CRM"
       },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "pageSize": {
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       }
     },
     "required": [
-      "refresh"
+      "entityType",
+      "recordId"
     ],
     "additionalProperties": false
   },
@@ -75,54 +67,64 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "title": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
+                    "number": {
+                      "type": "string"
+                    },
+                    "templateId": {
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
+                    "entityType": {
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
-                    "reason": {
+                    "entityId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "createTime": {
                       "type": "string"
+                    },
+                    "pdfReady": {
+                      "type": "boolean"
+                    },
+                    "hasPublicLink": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "id",
+                    "title",
+                    "number",
+                    "templateId",
+                    "entityType",
+                    "entityId",
+                    "createTime",
+                    "pdfReady",
+                    "hasPublicLink"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

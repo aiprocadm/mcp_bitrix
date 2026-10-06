@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "openlines_crm_chats",
+  "title": "Чаты открытых линий записи CRM",
+  "description": "Чаты открытых линий (мессенджеры, онлайн-чат сайта), привязанные к лиду, сделке, контакту или компании (imopenlines.crm.chat.get): ID чата и канал. Использовать, когда спрашивают «о чём клиент писал в мессенджере», затем openlines_chat_history по chatId. activeOnly=true — только открытые сейчас диалоги.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,32 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "entityType": {
         "type": "string",
         "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
-        ]
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
+      "recordId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID записи CRM"
       },
-      "refresh": {
+      "activeOnly": {
         "default": false,
-        "description": "Игнорировать кэш (5 минут)",
+        "description": "Только активные чаты (по умолчанию все, включая закрытые)",
         "type": "boolean"
       }
     },
     "required": [
-      "refresh"
+      "entityType",
+      "recordId",
+      "activeOnly"
     ],
     "additionalProperties": false
   },
@@ -70,59 +54,48 @@
           "data": {
             "type": "object",
             "properties": {
+              "entityType": {
+                "type": "string"
+              },
+              "recordId": {
+                "type": "number"
+              },
+              "recordTitle": {
+                "type": "string"
+              },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "chatId": {
+                      "type": "number"
+                    },
+                    "connectorId": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
+                    "connectorTitle": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "chatId",
+                    "connectorId",
+                    "connectorTitle"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
+              "entityType",
+              "recordId",
+              "recordTitle",
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

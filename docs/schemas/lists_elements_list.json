@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "lists_elements_list",
+  "title": "Элементы универсального списка",
+  "description": "Элементы универсального списка (lists.element.get) с полями, подписанными по-человечески (название поля → значение). Использовать, когда спрашивают «что в списке/реестре», «найди элемент списка». nameContains — поиск по названию элемента. До 50 элементов на страницу, продолжение — по cursor.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,44 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "iblockType": {
+        "default": "lists",
+        "description": "Тип: lists — универсальные списки, bitrix_processes — процессы, lists_socnet — списки групп",
         "type": "string",
         "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
+          "lists",
+          "bitrix_processes",
+          "lists_socnet"
         ]
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
+      "iblockId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID списка из lists_list"
       },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "nameContains": {
+        "description": "Часть названия элемента",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "pageSize": {
+        "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      },
+      "cursor": {
+        "description": "Непрозрачный курсор из предыдущего ответа",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       }
     },
     "required": [
-      "refresh"
+      "iblockType",
+      "iblockId"
     ],
     "additionalProperties": false
   },
@@ -70,59 +66,78 @@
           "data": {
             "type": "object",
             "properties": {
+              "iblockId": {
+                "type": "number"
+              },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "name": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
+                    "code": {
+                      "type": "string"
+                    },
+                    "createdBy": {
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
-                    "scope": {
+                    "dateCreate": {
                       "type": "string"
                     },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
+                    "sectionId": {
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
-                    "reason": {
-                      "type": "string"
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "id",
+                    "name",
+                    "code",
+                    "createdBy",
+                    "dateCreate",
+                    "sectionId",
+                    "fields"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
+              "iblockId",
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

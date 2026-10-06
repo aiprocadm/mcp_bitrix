@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "openlines_chat_history",
+  "title": "Переписка в открытой линии",
+  "description": "Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,28 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
-        "type": "string",
-        "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
-        ]
+      "chatId": {
+        "description": "ID чата линии (без префикса chat); без sessionId — последняя сессия",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
+      "sessionId": {
+        "description": "ID сессии (точнее, чем chatId)",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
       },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "maxMessages": {
+        "default": 100,
+        "description": "Сколько последних сообщений отдать",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
       }
     },
     "required": [
-      "refresh"
+      "maxMessages"
     ],
     "additionalProperties": false
   },
@@ -70,47 +50,22 @@
           "data": {
             "type": "object",
             "properties": {
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "method": {
-                      "type": "string"
-                    },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
+              "chatId": {
+                "type": "number"
               },
-              "summary": {
+              "sessionId": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "chatName": {
+                "type": "string"
+              },
+              "connectorId": {
+                "type": "string"
+              },
+              "crm": {
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
@@ -118,11 +73,90 @@
                 "additionalProperties": {
                   "type": "number"
                 }
+              },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "authorKind": {
+                      "type": "string",
+                      "enum": [
+                        "client",
+                        "operator",
+                        "system"
+                      ]
+                    },
+                    "authorId": {
+                      "type": "number"
+                    },
+                    "authorName": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "date",
+                    "authorKind",
+                    "authorId",
+                    "authorName",
+                    "text",
+                    "files"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "returnedCount": {
+                "type": "number"
+              },
+              "totalInSession": {
+                "type": "number"
               }
             },
             "required": [
-              "items",
-              "summary"
+              "chatId",
+              "sessionId",
+              "chatName",
+              "connectorId",
+              "crm",
+              "messages",
+              "returnedCount",
+              "totalInSession"
             ],
             "additionalProperties": false
           },

@@ -15,6 +15,14 @@ import {
 import { crmPipelineSummaryTool } from './crm/pipeline-summary.js';
 import { crmPipelinesOverviewTool } from './crm/pipelines-overview.js';
 import {
+  crmDocumentCreateTool,
+  crmDocumentGetTool,
+  crmDocumentsListTool,
+  crmDocumentTemplatesListTool,
+} from './crm/documents.js';
+import { listsTools } from './lists/lists.js';
+import { openlinesTools } from './openlines/openlines.js';
+import {
   crmActivitiesListTool,
   crmDealProductsGetTool,
   crmStageHistoryTool,
@@ -79,6 +87,11 @@ export function allTools(): readonly ToolDefinition[] {
     crmStatusCreateTool,
     crmStatusUpdateTool,
     crmPipelinesOverviewTool,
+    // генератор документов CRM (2026-10-06)
+    crmDocumentTemplatesListTool,
+    crmDocumentsListTool,
+    crmDocumentGetTool,
+    crmDocumentCreateTool,
     // §9.4 реквизиты и дела; §9.5/§9.7 универсальный crm.item.* (смарт-процессы, счета)
     ...crmRequisitesTools,
     ...crmItemsTools,
@@ -100,5 +113,8 @@ export function allTools(): readonly ToolDefinition[] {
     ...feedLandingTools,
     // §9.14 база знаний 2.0
     ...noteTools,
+    // открытые линии и универсальные списки (2026-10-06)
+    ...openlinesTools,
+    ...listsTools,
   ];
 }

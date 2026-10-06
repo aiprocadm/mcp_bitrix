@@ -34,6 +34,10 @@
 | `crm_status_create` | crm | create | false | false | false | да | [json](schemas/crm_status_create.json) |
 | `crm_status_update` | crm | update | false | false | true | да | [json](schemas/crm_status_update.json) |
 | `crm_pipelines_overview` | crm | read | true | false | true | да | [json](schemas/crm_pipelines_overview.json) |
+| `crm_document_templates_list` | crm | read | true | false | true | да | [json](schemas/crm_document_templates_list.json) |
+| `crm_documents_list` | crm | read | true | false | true | да | [json](schemas/crm_documents_list.json) |
+| `crm_document_get` | crm | read | true | false | true | да | [json](schemas/crm_document_get.json) |
+| `crm_document_create` | crm | create | false | false | false | да | [json](schemas/crm_document_create.json) |
 | `crm_activity_create` | crm | create | false | false | false | да | [json](schemas/crm_activity_create.json) |
 | `crm_activity_update` | crm | update | false | false | true | да | [json](schemas/crm_activity_update.json) |
 | `crm_requisite_create` | crm | create | false | false | false | да | [json](schemas/crm_requisite_create.json) |
@@ -119,6 +123,12 @@
 | `kb2_base_create` | knowledgeBase | create | false | false | false | да | [json](schemas/kb2_base_create.json) |
 | `kb2_document_create` | knowledgeBase | create | false | false | false | да | [json](schemas/kb2_document_create.json) |
 | `kb2_document_update` | knowledgeBase | update | false | false | true | да | [json](schemas/kb2_document_update.json) |
+| `openlines_list` | openlines | read | true | false | true | да | [json](schemas/openlines_list.json) |
+| `openlines_crm_chats` | openlines | read | true | false | true | да | [json](schemas/openlines_crm_chats.json) |
+| `openlines_chat_history` | openlines | read | true | false | true | да | [json](schemas/openlines_chat_history.json) |
+| `lists_list` | lists | read | true | false | true | да | [json](schemas/lists_list.json) |
+| `lists_fields_get` | lists | read | true | false | true | да | [json](schemas/lists_fields_get.json) |
+| `lists_elements_list` | lists | read | true | false | true | да | [json](schemas/lists_elements_list.json) |
 
 ## Описания
 
@@ -229,6 +239,22 @@
 ### `crm_pipelines_overview`
 
 entityType=deal — количество и суммы сделок по КАЖДОЙ воронке и её стадиям за период (выиграно/проиграно/в работе); entityType=lead — лиды по стадиям и по источникам (откуда пришли). Использовать для вопросов «как дела во всех воронках», «сколько лидов за месяц и откуда», «сколько лидов провалено». Одна воронка подробно — crm_pipeline_summary. Считается по ограниченной выборке (maxRecords, лимит времени): ответ сообщает scannedCount, hasMore и полноту — сужайте период. Суммы в разных валютах не складываются. Это снимок текущих стадий, не историческая конверсия.
+
+### `crm_document_templates_list`
+
+Шаблоны генератора документов (договоры, счета, КП, акты): ID, название, к каким записям CRM привязан, активен ли. Использовать перед crm_document_create, когда просят «сформируй договор/счёт по сделке». Файлы шаблонов не отдаются.
+
+### `crm_documents_list`
+
+Документы, сформированные генератором по записи CRM (договоры, счета, КП): ID, название, номер, шаблон, дата, готов ли PDF. Использовать, когда спрашивают «какие документы уже сделаны по сделке», «есть ли договор». Ссылки на файлы не отдаются — документ открывается в карточке записи.
+
+### `crm_document_get`
+
+Карточка документа генератора по ID: название, номер, шаблон, запись CRM, готов ли PDF, была ли ошибка преобразования. Использовать после crm_document_create, чтобы узнать, готов ли PDF. Ссылки на файл не отдаются.
+
+### `crm_document_create`
+
+Сформировать документ (договор, счёт, КП, акт) по шаблону генератора для записи CRM (crm.documentgenerator.document.add). Использовать, когда просят «сделай договор по сделке». Шаблон — из crm_document_templates_list, он должен быть привязан к типу записи. values — необязательные значения полей шаблона. Документ появится в карточке записи; PDF готовится порталом, проверка — crm_document_get. Порядок: вызов без approvalId возвращает APPROVAL_REQUIRED с планом; человек подтверждает; повтор с approvalId создаёт документ ровно один раз.
 
 ### `crm_activity_create`
 
@@ -569,6 +595,30 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `kb2_document_update`
 
 Дописать (mode=append) или переписать (mode=replace) текст документа Базы знаний 2.0 и при необходимости название (REST 3.0 note.document.get + note.document.update). Использовать, когда пользователь явно просит изменить документ. Сначала kb2_document_get: его contentHash передаётся как expectedStateHash (для append и overwrite=true обязателен). Если документ правят в редакторе Bitrix24 — CONFLICT (COLLABORATIVE_EDIT_CONFLICT); overwrite=true (затирание несохранённых правок) только отдельным планом по явному решению человека. Порядок: APPROVAL_REQUIRED → подтверждение → повтор с approvalId.
+
+### `openlines_list`
+
+Список открытых линий портала (imopenlines.config.list.get): ID, название, активна ли. Использовать, когда спрашивают «какие у нас каналы связи с клиентами», перед чтением переписки. Очередь операторов не отдаётся.
+
+### `openlines_crm_chats`
+
+Чаты открытых линий (мессенджеры, онлайн-чат сайта), привязанные к лиду, сделке, контакту или компании (imopenlines.crm.chat.get): ID чата и канал. Использовать, когда спрашивают «о чём клиент писал в мессенджере», затем openlines_chat_history по chatId. activeOnly=true — только открытые сейчас диалоги.
+
+### `openlines_chat_history`
+
+Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений.
+
+### `lists_list`
+
+Перечень универсальных списков портала (lists.get): ID, название, код, описание. Использовать, когда спрашивают «какие у нас списки/реестры», перед чтением элементов списка.
+
+### `lists_fields_get`
+
+Поля универсального списка (lists.field.get): код (NAME или PROPERTY_N), название, тип, обязательность, варианты значений. Использовать, чтобы понять структуру списка перед lists_elements_list.
+
+### `lists_elements_list`
+
+Элементы универсального списка (lists.element.get) с полями, подписанными по-человечески (название поля → значение). Использовать, когда спрашивают «что в списке/реестре», «найди элемент списка». nameContains — поиск по названию элемента. До 50 элементов на страницу, продолжение — по cursor.
 
 ## Запланировано (ТЗ §9, не реализовано)
 

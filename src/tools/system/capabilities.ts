@@ -21,6 +21,8 @@ const MODULE_PREFIXES: Record<string, string[]> = {
   orders: ['sale.'],
   feed: ['log.'],
   groups: ['sonet_group.'],
+  openlines: ['imopenlines.'],
+  lists: ['lists.'],
 };
 
 export function methodBelongsToModule(d: MethodDescriptor, module: string): boolean {

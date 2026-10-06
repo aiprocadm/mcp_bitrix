@@ -220,6 +220,9 @@ export function moduleReadChecks(
     { module: 'feed', tool: 'feed_posts_list', args: { pageSize: 3 } },
     { module: 'knowledgeBase', tool: 'kb_legacy_bases_list', args: { scope: 'KNOWLEDGE', pageSize: 5 } },
     { module: 'knowledgeBase', tool: 'kb2_bases_list', args: { pageSize: 5 } },
+    { module: 'openlines', tool: 'openlines_list', args: {} },
+    { module: 'lists', tool: 'lists_list', args: { pageSize: 5 } },
+    { module: 'crm', tool: 'crm_document_templates_list', args: {} },
   ];
   if (userId > 0)
     checks.push({ module: 'calendar', tool: 'calendar_list', args: { type: 'user', ownerId: userId } });

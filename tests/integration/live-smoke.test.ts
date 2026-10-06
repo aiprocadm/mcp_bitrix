@@ -191,6 +191,7 @@ describe('live-smoke (§10.3) на mock', () => {
       'calendar_list',
       'chat_recent_list',
       'company_departments_list',
+      'crm_document_templates_list',
       'crm_list_records',
       'crm_stages_and_statuses',
       'disk_storages_list',

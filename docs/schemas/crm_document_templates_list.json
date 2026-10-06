@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "crm_document_templates_list",
+  "title": "Шаблоны документов CRM",
+  "description": "Шаблоны генератора документов (договоры, счета, КП, акты): ID, название, к каким записям CRM привязан, активен ли. Использовать перед crm_document_create, когда просят «сформируй договор/счёт по сделке». Файлы шаблонов не отдаются.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,26 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "entityType": {
+        "description": "Только шаблоны для этого типа записи",
         "type": "string",
         "enum": [
-          "system",
+          "deal",
+          "lead",
+          "contact",
           "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
+          "quote",
+          "invoice"
         ]
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
-      },
-      "refresh": {
+      "includeInactive": {
         "default": false,
-        "description": "Игнорировать кэш (5 минут)",
+        "description": "Показать и выключенные шаблоны",
         "type": "boolean"
       }
     },
     "required": [
-      "refresh"
+      "includeInactive"
     ],
     "additionalProperties": false
   },
@@ -75,54 +53,49 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "name": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "entityTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "numeratorId": {
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string"
+                    "sort": {
+                      "type": "number"
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "id",
+                    "name",
+                    "active",
+                    "entityTypes",
+                    "numeratorId",
+                    "sort"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

@@ -228,6 +228,26 @@
     {
       "apiVersion": "legacy",
       "method": "crm.status.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "imopenlines.config.list.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "imopenlines.crm.chat.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "imopenlines.dialog.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "lists.get"
+    },
+    {
+      "apiVersion": "legacy",
+      "method": "lists.field.get"
     }
   ]
 }

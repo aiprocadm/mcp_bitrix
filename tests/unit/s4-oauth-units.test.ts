@@ -191,7 +191,10 @@ describe('S4: PKCE, состояние, настройки, ключи', () => {
     expect(s.open<{ a: number }>('login', sealed, 1000)?.a).toBe(1);
     expect(s.open('consent', sealed, 1000)).toBeUndefined();
     expect(s.open('login', sealed, 2000)).toBeUndefined();
-    const tampered = sealed.slice(0, -2) + (sealed.endsWith('A') ? 'BB' : 'AA');
+    // Портим символ в середине: последние символы base64url могут нести только незначащие биты,
+    // и замена «хвоста» изредка не меняла данные (тест падал случайно).
+    const mid = Math.floor(sealed.length / 2);
+    const tampered = sealed.slice(0, mid) + (sealed[mid] === 'A' ? 'B' : 'A') + sealed.slice(mid + 1);
     expect(s.open('login', tampered, 1000)).toBeUndefined();
     expect(new StateSealer(Buffer.alloc(32, 2)).open('login', sealed, 1000)).toBeUndefined();
     expect(s.csrf('b1', sealed)).not.toBe(s.csrf('b2', sealed));
