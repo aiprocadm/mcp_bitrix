@@ -48,9 +48,35 @@ const ENTITY_NAMES: Record<number, string> = {
 const entityTypeIdOf = (t: RecordTarget): number =>
   t.kind === 'classic' ? t.entity.entityTypeId : t.target.entityTypeId;
 
-async function recordInfo(ctx: ToolContext, t: RecordTarget, id: number): Promise<string> {
-  if (t.kind === 'classic') return recordTitle(t.entity, await getRecord(ctx, t.entity, id));
-  return itemTitle(await getItem(ctx, t.target, id));
+/** Название записи и её воронка (у сделок CATEGORY_ID, у счетов/смарт-процессов categoryId; у остальных null). */
+async function recordInfo(
+  ctx: ToolContext,
+  t: RecordTarget,
+  id: number,
+): Promise<{ title: string; categoryId: number | null }> {
+  if (t.kind === 'classic') {
+    const rec = await getRecord(ctx, t.entity, id);
+    return {
+      title: recordTitle(t.entity, rec),
+      categoryId: t.entity.type === 'deal' ? (num(rec['CATEGORY_ID']) ?? 0) : null,
+    };
+  }
+  const item = await getItem(ctx, t.target, id);
+  return { title: itemTitle(item), categoryId: num(item['categoryId']) ?? null };
+}
+
+/**
+ * Привязка шаблона к типу записи. Живой портал (2026-10-06): не только «1», «7», но и «2_category_0» (сделки воронки 0),
+ * «31_1» (счета воронки 1), «16documentrealization», имена классов провайдеров. Распознаются числовые типы
+ * с необязательной воронкой; прочее (склад, реализация) к записям CRM не относится и пропускается.
+ */
+export function parseBinding(code: string): { type: string; categoryId: number | null } | undefined {
+  const m = /^(\d+)(?:_category_(\d+)|_(\d+))?$/.exec(code.trim());
+  if (!m) return undefined;
+  const type = ENTITY_NAMES[Number(m[1])];
+  if (!type) return undefined;
+  const cat = m[2] ?? m[3];
+  return { type, categoryId: cat === undefined ? null : Number(cat) };
 }
 
 // ---------- шаблоны ----------
@@ -60,8 +86,16 @@ export interface DocTemplate {
   name: string;
   active: boolean;
   entityTypes: string[];
+  /** Воронки сделок, к которым привязан шаблон (пусто — ко всем, если есть привязка «2» без воронки). */
+  dealCategoryIds: number[];
+  bindings: { type: string; categoryId: number | null }[];
   numeratorId: number | null;
   sort: number;
+}
+
+/** Подходит ли шаблон записи: тот же тип и — если привязка с воронкой — та же воронка. */
+export function templateFits(t: DocTemplate, type: string, categoryId: number | null): boolean {
+  return t.bindings.some((b) => b.type === type && (b.categoryId === null || b.categoryId === categoryId));
 }
 
 /** Ответ template.list: result.templates — объект по ID (живой портал) или массив (страница документации). */
@@ -72,13 +106,20 @@ export function parseTemplates(result: JsonValue): DocTemplate[] {
   return list.filter(isObj).flatMap((x) => {
     const id = idOf(x['id']);
     if (id === undefined) return [];
-    const types = Array.isArray(x['entityTypeId']) ? x['entityTypeId'] : [x['entityTypeId']];
+    const codes = Array.isArray(x['entityTypeId']) ? x['entityTypeId'] : [x['entityTypeId']];
+    const bindings = codes.map((v) => parseBinding(asText(v))).filter((b) => b !== undefined);
     return [
       {
         id,
         name: asText(x['name']),
         active: yn(x['active']),
-        entityTypes: types.map((v) => ENTITY_NAMES[Number(asText(v))] ?? asText(v)).filter((v) => v !== ''),
+        entityTypes: [...new Set(bindings.map((b) => b.type))],
+        dealCategoryIds: [
+          ...new Set(
+            bindings.filter((b) => b.type === 'deal' && b.categoryId !== null).map((b) => b.categoryId ?? 0),
+          ),
+        ].sort((a, b) => a - b),
+        bindings,
         numeratorId: idOf(x['numeratorId']) ?? null,
         sort: num(x['sort']) ?? 0,
       },
@@ -115,6 +156,7 @@ const templateOut = z.object({
   name: z.string(),
   active: z.boolean(),
   entityTypes: z.array(z.string()),
+  dealCategoryIds: z.array(z.number()),
   numeratorId: z.number().nullable(),
   sort: z.number(),
 });
@@ -133,15 +175,27 @@ export const crmDocumentTemplatesListTool = defineTool({
     .object({
       entityType: docEntitySchema.optional().describe('Только шаблоны для этого типа записи'),
       includeInactive: z.boolean().default(false).describe('Показать и выключенные шаблоны'),
+      dealCategoryId: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+          'Только шаблоны, доступные сделкам этой воронки (шаблоны привязываются к воронкам сделок отдельно)',
+        ),
     })
     .strict(),
   outputDataSchema: z.object({ items: z.array(templateOut), returnedCount: z.number() }),
   handler: async (args, ctx) => {
     const { items, hasMore } = await listTemplates(ctx);
-    const shown = items.filter(
-      (t) =>
-        (args.includeInactive || t.active) && (!args.entityType || t.entityTypes.includes(args.entityType)),
-    );
+    const shown = items
+      .filter(
+        (t) =>
+          (args.includeInactive || t.active) &&
+          (!args.entityType || t.entityTypes.includes(args.entityType)) &&
+          (args.dealCategoryId === undefined || templateFits(t, 'deal', args.dealCategoryId)),
+      )
+      .map(({ bindings: _bindings, ...rest }) => rest);
     return ok(
       { items: shown, returnedCount: shown.length },
       {
@@ -172,7 +226,11 @@ export function normalizeDocument(raw: JsonValue) {
     entityType: etid === undefined ? null : (ENTITY_NAMES[etid] ?? String(etid)),
     entityId: idOf(raw['entityId']) ?? null,
     createTime: asText(raw['createTime']),
-    pdfReady: (idOf(raw['pdfId']) ?? 0) > 0,
+    // В списке есть pdfId; карточка (document.get) его не присылает — там признак по наличию pdfUrl (сама ссылка не выдаётся).
+    pdfReady:
+      raw['pdfId'] !== undefined
+        ? (idOf(raw['pdfId']) ?? 0) > 0
+        : asText(raw['pdfUrl']) !== '' && !yn(raw['isTransformationError']),
     hasPublicLink: asText(raw['publicUrl']) !== '',
   };
 }
@@ -338,14 +396,18 @@ export const crmDocumentCreateTool = defineTool({
         reason: 'TEMPLATE_INACTIVE',
       });
     }
-    if (!template.entityTypes.includes(args.entityType)) {
+    const { title, categoryId } = await recordInfo(ctx, target, args.recordId);
+    if (!templateFits(template, args.entityType, categoryId)) {
+      const where =
+        args.entityType === 'deal' && template.entityTypes.includes('deal')
+          ? `воронка сделки ${String(categoryId)}, шаблон доступен воронкам: ${template.dealCategoryIds.join(', ')}`
+          : `привязан к: ${template.entityTypes.join(', ') || 'нет'}`;
       throw new AppError(
         'VALIDATION_ERROR',
-        `Шаблон «${template.name}» не привязан к типу ${args.entityType} (привязан к: ${template.entityTypes.join(', ') || 'нет'})`,
+        `Шаблон «${template.name}» не подходит записи ${args.entityType} (${where})`,
         { field: 'templateId', reason: 'TEMPLATE_ENTITY_MISMATCH' },
       );
     }
-    const title = await recordInfo(ctx, target, args.recordId);
     const params: JsonObject = { templateId: args.templateId, entityTypeId, entityId: args.recordId };
     if (args.values) params['values'] = args.values;
     if (args.stampsEnabled !== undefined) params['stampsEnabled'] = args.stampsEnabled ? 1 : 0;
