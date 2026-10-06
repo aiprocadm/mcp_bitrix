@@ -93,8 +93,13 @@ export function parseLegacyResponse(
     );
   }
   if (httpStatus < 200 || httpStatus >= 300) {
+    // Часть методов CRM (crm.deal.contact.*, crm.contact.company.*) отвечает на отсутствующую запись пустым
+    // кодом и текстом «Not found.» (живой портал 2026-10-06, официальные страницы методов) — это NOT_FOUND.
+    const description = obj['error_description'];
+    const notFound =
+      errorField === '' && typeof description === 'string' && /^not found\.?$/i.test(description.trim());
     throw mapUpstreamError(
-      { httpStatus, upstreamCode: undefined, retryAfterMs },
+      { httpStatus, upstreamCode: notFound ? 'NOT_FOUND' : undefined, retryAfterMs },
       descriptor.method,
       'legacy',
       descriptor.scope,

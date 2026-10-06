@@ -222,6 +222,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

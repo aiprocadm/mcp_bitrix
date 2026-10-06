@@ -20,9 +20,10 @@
           "contact",
           "company",
           "smart",
-          "invoice"
+          "invoice",
+          "quote"
         ],
-        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
       },
       "entityTypeId": {
         "type": "integer",
@@ -63,9 +64,10 @@
                   "contact",
                   "company",
                   "smart",
-                  "invoice"
+                  "invoice",
+                  "quote"
                 ],
-                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
               },
               "entityTypeId": {
                 "type": "number"
@@ -253,6 +255,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

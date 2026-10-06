@@ -32,13 +32,15 @@ import { parseItemFieldsResult, type ItemFieldsMeta } from './item-fields.js';
 import { ACTIVITY_FIELDS, normalizeRow, type ProductRow } from './related-service.js';
 
 export const INVOICE_ENTITY_TYPE_ID = 31;
+/** Коммерческое предложение (crm.item.*, entityTypeId=7): без воронок, стадии — справочник QUOTE_STATUS. */
+export const QUOTE_ENTITY_TYPE_ID = 7;
 /** Системные типы CRM из справочника типов объектов: не смарт-процессы (лид, сделка, контакт, компания, старый счёт, предложение, реквизит, заказ, новый счёт). */
 const SYSTEM_ENTITY_TYPE_IDS: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 7, 8, 14, 31]);
 
 const FIELDS_CACHE_KIND = 'item-fields';
 const TYPE_CACHE_KIND = 'smart-type';
 
-export type ItemKind = 'smart' | 'invoice';
+export type ItemKind = 'smart' | 'invoice' | 'quote';
 export type CrmItem = Record<string, JsonValue>;
 
 export interface SmartType {
@@ -112,7 +114,9 @@ export async function resolveSmartType(ctx: ToolContext, entityTypeId: number): 
       entityTypeId,
       entityTypeId === INVOICE_ENTITY_TYPE_ID
         ? 'это новый счёт, используйте entityType=invoice или invoice_*'
-        : 'это системный тип CRM, а не смарт-процесс',
+        : entityTypeId === QUOTE_ENTITY_TYPE_ID
+          ? 'это коммерческое предложение, используйте entityType=quote'
+          : 'это системный тип CRM, а не смарт-процесс',
     );
   }
   const key = String(entityTypeId);
@@ -173,6 +177,20 @@ export const INVOICE_TARGET: ItemTarget = {
   smartType: undefined,
 };
 
+/**
+ * Предопределённый тип 7 — коммерческое предложение. Живой портал (2026-10-06): crm.item.fields(7) без categoryId,
+ * crm.category.list(7) → ENTITY_TYPE_NOT_SUPPORTED; стадии — crm.status.list ENTITY_ID=QUOTE_STATUS
+ * (официальная страница crm.item.add); ownerType товарных строк — Q (crm.item.productrow.list).
+ */
+export const QUOTE_TARGET: ItemTarget = {
+  kind: 'quote',
+  entityTypeId: QUOTE_ENTITY_TYPE_ID,
+  label: 'коммерческое предложение',
+  labelAccusative: 'коммерческое предложение',
+  ownerType: 'Q',
+  smartType: undefined,
+};
+
 // ---------- метаданные ----------
 
 export async function getItemFieldsMeta(
@@ -202,6 +220,7 @@ export function defaultItemSelect(target: ItemTarget, meta: ItemFieldsMeta): str
     'id',
     'title',
     ...(target.kind === 'invoice' ? ['accountNumber'] : []),
+    ...(target.kind === 'quote' ? ['quoteNumber', 'dealId', 'closedate'] : []),
     'categoryId',
     'stageId',
     'assignedById',
@@ -367,6 +386,7 @@ export function compareItemFields(
 // ---------- стадии ----------
 
 export function itemStageEntityId(target: ItemTarget, categoryId: number): string {
+  if (target.kind === 'quote') return 'QUOTE_STATUS';
   return target.kind === 'invoice'
     ? `SMART_INVOICE_STAGE_${String(categoryId)}`
     : `DYNAMIC_${String(target.entityTypeId)}_STAGE_${String(categoryId)}`;
@@ -413,7 +433,9 @@ export async function assertItemStageValid(
   const wanted = asText(fields['stageId']);
   const fromFields = num(fields['categoryId']);
   const fromCurrent = current ? num(current['categoryId']) : undefined;
-  const categoryId = fromFields ?? fromCurrent ?? (await defaultCategoryId(ctx, target));
+  // У КП воронок нет (crm.category.list(7) не поддерживается): справочник стадий один.
+  const categoryId =
+    target.kind === 'quote' ? 0 : (fromFields ?? fromCurrent ?? (await defaultCategoryId(ctx, target)));
   const { entityId, stages } = await itemStages(ctx, target, categoryId);
   if (!stages.some((s) => s.statusId === wanted)) {
     throw new AppError(
@@ -425,7 +447,9 @@ export async function assertItemStageValid(
         nextAction:
           target.kind === 'invoice'
             ? 'Проверьте стадии: invoice_stages_list'
-            : 'Проверьте стадии: crm_stages_and_statuses (statusEntityId) или crm_fields_get',
+            : target.kind === 'quote'
+              ? 'Проверьте стадии: crm_stages_and_statuses (statusEntityId=QUOTE_STATUS)'
+              : 'Проверьте стадии: crm_stages_and_statuses (statusEntityId) или crm_fields_get',
       },
     );
   }

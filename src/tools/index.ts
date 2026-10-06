@@ -6,7 +6,14 @@ import { crmCreateRecordTool } from './crm/create-record.js';
 import { crmFieldsGetTool } from './crm/fields-get.js';
 import { crmGetRecordTool } from './crm/get-record.js';
 import { crmListRecordsTool } from './crm/list-records.js';
+import {
+  crmContactCompaniesListTool,
+  crmContactCompanyAddTool,
+  crmDealContactAddTool,
+  crmDealContactsListTool,
+} from './crm/links.js';
 import { crmPipelineSummaryTool } from './crm/pipeline-summary.js';
+import { crmPipelinesOverviewTool } from './crm/pipelines-overview.js';
 import {
   crmActivitiesListTool,
   crmDealProductsGetTool,
@@ -17,6 +24,7 @@ import {
 import { crmDealProductsReplaceTool, crmTimelineCommentAddTool } from './crm/related-write.js';
 import { crmSearchRecordsTool } from './crm/search-records.js';
 import { crmStagesAndStatusesTool } from './crm/stages.js';
+import { crmStatusCreateTool, crmStatusUpdateTool } from './crm/status-write.js';
 import { crmUpdateRecordTool } from './crm/update-record.js';
 import { capabilitiesTool } from './system/capabilities.js';
 import { connectionInfoTool } from './system/connection-info.js';
@@ -63,6 +71,14 @@ export function allTools(): readonly ToolDefinition[] {
     crmTimelineCommentsListTool,
     crmDealProductsGetTool,
     crmDealProductsReplaceTool,
+    // связи записей, справочники, сводка по всем воронкам (живой портал, 2026-10-06)
+    crmDealContactsListTool,
+    crmDealContactAddTool,
+    crmContactCompaniesListTool,
+    crmContactCompanyAddTool,
+    crmStatusCreateTool,
+    crmStatusUpdateTool,
+    crmPipelinesOverviewTool,
     // §9.4 реквизиты и дела; §9.5/§9.7 универсальный crm.item.* (смарт-процессы, счета)
     ...crmRequisitesTools,
     ...crmItemsTools,

@@ -1,7 +1,7 @@
 {
   "name": "crm_get_record",
   "title": "Карточка записи CRM",
-  "description": "Карточка записи CRM по ID в рамках доступных полей: сделка, лид, контакт, компания (crm.<entity>.get, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) или новый счёт (invoice) через crm.item.get (поля camelCase). Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для expectedStateHash в crm_update_record/crm_delete_record. include добавляет небольшие связанные блоки (дела, комментарии, товары) с отдельными лимитами и полнотой; бинарные вложения не скачиваются.",
+  "description": "Карточка записи CRM по ID в рамках доступных полей: сделка, лид, контакт, компания (crm.<entity>.get, поля ВЕРХНИЙ_РЕГИСТР), элемент смарт-процесса (entityType=smart + entityTypeId) , новый счёт (invoice) или коммерческое предложение (quote) через crm.item.get (поля camelCase). Использовать, когда известен ID и нужны поля записи. Возвращает stateHash для expectedStateHash в crm_update_record/crm_delete_record. include добавляет небольшие связанные блоки (дела, комментарии, товары) с отдельными лимитами и полнотой; бинарные вложения не скачиваются.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -20,9 +20,10 @@
           "contact",
           "company",
           "smart",
-          "invoice"
+          "invoice",
+          "quote"
         ],
-        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+        "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
       },
       "entityTypeId": {
         "type": "integer",
@@ -46,7 +47,7 @@
         }
       },
       "include": {
-        "description": "Связанные блоки, каждый со своим лимитом и completeness: activities (до 10 дел), comments (до 10 комментариев таймлайна, только классические сущности), products (до 20 товарных позиций: сделка, лид, smart, invoice). Полные списки — отдельные инструменты",
+        "description": "Связанные блоки, каждый со своим лимитом и completeness: activities (до 10 дел), comments (до 10 комментариев таймлайна, только классические сущности), products (до 20 товарных позиций: сделка, лид, smart, invoice, quote). Полные списки — отдельные инструменты",
         "maxItems": 3,
         "type": "array",
         "items": {
@@ -86,9 +87,10 @@
                   "contact",
                   "company",
                   "smart",
-                  "invoice"
+                  "invoice",
+                  "quote"
                 ],
-                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase"
+                "description": "Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase"
               },
               "entityTypeId": {
                 "type": "number"
@@ -273,6 +275,8 @@
                   "AUDIT_UNAVAILABLE",
                   "ACCESS_DENIED",
                   "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
                   "INTERNAL_ERROR"
                 ]
               },

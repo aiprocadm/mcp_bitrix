@@ -26,6 +26,8 @@ import {
   getItemFieldsMeta,
   INVOICE_ENTITY_TYPE_ID,
   INVOICE_TARGET,
+  QUOTE_ENTITY_TYPE_ID,
+  QUOTE_TARGET,
   itemsPage,
   itemStateHash,
   itemTitle,
@@ -35,14 +37,15 @@ import {
   type ItemTarget,
 } from './item-service.js';
 
-export const RECORD_ENTITY_TYPES = [...CLASSIC_ENTITY_TYPES, 'smart', 'invoice'] as const;
+export const RECORD_ENTITY_TYPES = [...CLASSIC_ENTITY_TYPES, 'smart', 'invoice', 'quote'] as const;
 export type RecordEntityType = (typeof RECORD_ENTITY_TYPES)[number];
 
 export const recordEntityTypeSchema = z
   .enum(RECORD_ENTITY_TYPES)
   .describe(
     'Тип записи CRM: deal, lead, contact, company (классические, поля ВЕРХНИЙ_РЕГИСТР); ' +
-      'smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31); у smart/invoice поля camelCase',
+      'smart — элемент смарт-процесса (нужен entityTypeId), invoice — новый счёт (entityTypeId=31), ' +
+      'quote — коммерческое предложение (entityTypeId=7, без воронок); у smart/invoice/quote поля camelCase',
   );
 
 export const entityTypeIdSchema = z
@@ -80,6 +83,15 @@ export async function resolveRecordTarget(
       });
     }
     return { kind: 'item', target: INVOICE_TARGET };
+  }
+  if (entityType === 'quote') {
+    if (entityTypeId !== undefined && entityTypeId !== QUOTE_ENTITY_TYPE_ID) {
+      throw new AppError('VALIDATION_ERROR', 'entityTypeId: для quote не передаётся (всегда 7)', {
+        field: 'entityTypeId',
+        reason: 'UNEXPECTED_ENTITY_TYPE_ID',
+      });
+    }
+    return { kind: 'item', target: QUOTE_TARGET };
   }
   if (entityTypeId !== undefined) {
     throw new AppError(
@@ -191,6 +203,9 @@ function createRisks(target: ItemTarget, fields: JsonObject): string[] {
     risks.push(
       'Создаётся только карточка счёта: PDF, отправка клиенту, ссылка на оплату и отметка оплаты НЕ выполняются',
     );
+  }
+  if (target.kind === 'quote') {
+    risks.push('Создаётся только карточка КП: печатная форма и отправка клиенту НЕ выполняются');
   }
   return risks;
 }
