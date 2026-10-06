@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "crm_document_get",
+  "title": "Документ CRM",
+  "description": "Карточка документа генератора по ID: название, номер, шаблон, запись CRM, готов ли PDF, была ли ошибка преобразования. Использовать после crm_document_create, чтобы узнать, готов ли PDF. Ссылки на файл не отдаются.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,15 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
-        "type": "string",
-        "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
-        ]
-      },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
-      },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "id": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID документа"
       }
     },
     "required": [
-      "refresh"
+      "id"
     ],
     "additionalProperties": false
   },
@@ -70,59 +37,64 @@
           "data": {
             "type": "object",
             "properties": {
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "method": {
-                      "type": "string"
-                    },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
+              "id": {
+                "type": "number"
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "title": {
+                "type": "string"
+              },
+              "number": {
+                "type": "string"
+              },
+              "templateId": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "entityType": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "entityId": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "createTime": {
+                "type": "string"
+              },
+              "pdfReady": {
+                "type": "boolean"
+              },
+              "hasPublicLink": {
+                "type": "boolean"
+              },
+              "isTransformationError": {
+                "type": "boolean"
+              },
+              "transformationError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
-              "items",
-              "summary"
+              "id",
+              "title",
+              "number",
+              "templateId",
+              "entityType",
+              "entityId",
+              "createTime",
+              "pdfReady",
+              "hasPublicLink",
+              "isTransformationError",
+              "transformationError"
             ],
             "additionalProperties": false
           },

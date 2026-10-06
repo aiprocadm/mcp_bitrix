@@ -15,6 +15,8 @@ export const ALL_MODULES = [
   'orders',
   'feed',
   'groups',
+  'openlines',
+  'lists',
 ] as const;
 
 export type ModuleName = (typeof ALL_MODULES)[number];

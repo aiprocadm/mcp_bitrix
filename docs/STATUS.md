@@ -33,6 +33,15 @@
 | 13  | Полная версия              | ✅ 25.09 | срезы 10–11 (классический CRM, связанные данные) + срез 12: все модули §9.2–9.14 — `docs/modules/*.md`                                                                                                                                                                           |
 | 14  | Destructive-функции        | ✅ 25.09 | 6 delete-инструментов (`crm_delete_record`, `task_delete`, `task_checklist_delete`, `calendar_delete_event`, `company_department_delete`, `disk_delete_file`): impact в плане, CONFLICT, verify по отсутствию; скрыты без `ENABLE_DESTRUCTIVE_TOOLS`, только administrator       |
 
+## Что именно сделано (2026-10-06, часть 2 — открытые линии, документы, списки)
+
+- Модули `openlines` (scope `imopenlines`): `openlines_list`, `openlines_crm_chats`, `openlines_chat_history`;
+  `lists` (scope `lists`): `lists_list`, `lists_fields_get`, `lists_elements_list`; в `crm` — генератор документов:
+  `crm_document_templates_list`, `crm_documents_list`, `crm_document_get`, `crm_document_create` (по подтверждению).
+- Живой портал: шаблоны документов отдают `downloadMachine` с кодом вебхука — генератор закрыт для raw, только белый список полей.
+- Подробности — `docs/modules/openlines-docs-lists.md`. 122 инструмента. Заодно исправлен случайно падавший тест подписи
+  состояния (`s4-oauth-units`: порча «хвоста» base64url иногда не меняла данные).
+
 ## Что именно сделано (2026-10-06 — по заданию владельца с живого портала)
 
 - Связи CRM: `crm_deal_contacts_list`, `crm_deal_contact_add`, `crm_contact_companies_list`, `crm_contact_company_add`;

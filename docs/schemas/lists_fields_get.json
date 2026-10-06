@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "lists_fields_get",
+  "title": "Поля универсального списка",
+  "description": "Поля универсального списка (lists.field.get): код (NAME или PROPERTY_N), название, тип, обязательность, варианты значений. Использовать, чтобы понять структуру списка перед lists_elements_list.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,48 +12,26 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
+      "iblockType": {
+        "default": "lists",
+        "description": "Тип: lists — универсальные списки, bitrix_processes — процессы, lists_socnet — списки групп",
         "type": "string",
         "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists"
+          "lists",
+          "bitrix_processes",
+          "lists_socnet"
         ]
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
-      },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "iblockId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID списка из lists_list"
       }
     },
     "required": [
-      "refresh"
+      "iblockType",
+      "iblockId"
     ],
     "additionalProperties": false
   },
@@ -70,59 +48,58 @@
           "data": {
             "type": "object",
             "properties": {
+              "iblockId": {
+                "type": "number"
+              },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "method": {
+                    "fieldId": {
                       "type": "string"
                     },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
+                    "name": {
                       "type": "string"
                     },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
+                    "type": {
                       "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "multiple": {
+                      "type": "boolean"
+                    },
+                    "values": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
+                    "fieldId",
+                    "name",
+                    "type",
+                    "required",
+                    "multiple",
+                    "values"
                   ],
                   "additionalProperties": false
                 }
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "returnedCount": {
+                "type": "number"
               }
             },
             "required": [
+              "iblockId",
               "items",
-              "summary"
+              "returnedCount"
             ],
             "additionalProperties": false
           },
