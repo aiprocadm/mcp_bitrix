@@ -33,13 +33,28 @@ const TEMPLATES = {
       active: 'Y',
       numeratorId: '49',
       sort: '100',
-      entityTypeId: ['2', '7'],
+      // Живой портал: сделки — по воронкам «2_category_N», счета — «31_1», плюс служебные коды склада.
+      entityTypeId: [
+        '2_category_0',
+        '2_category_5',
+        '7',
+        '31_1',
+        '16documentrealization',
+        'bitrix\\crm\\integration\\documentgenerator\\dataprovider\\storedocumentarrival',
+      ],
       download:
         'https://p.bitrix24.invalid/bitrix/services/main/ajax.php?action=crm.documentgenerator.template.download&id=175',
       downloadMachine: `https://p.bitrix24.invalid/${SECRET}crm.documentgenerator.template.download/?token=abc`,
     },
-    '137': { id: '137', name: 'Договор', active: 'Y', sort: '200', entityTypeId: ['2'], numeratorId: null },
-    '120': { id: '120', name: 'Старый акт', active: 'N', sort: '300', entityTypeId: ['2'] },
+    '137': {
+      id: '137',
+      name: 'Договор',
+      active: 'Y',
+      sort: '200',
+      entityTypeId: ['2_category_0'],
+      numeratorId: null,
+    },
+    '120': { id: '120', name: 'Старый акт', active: 'N', sort: '300', entityTypeId: ['2_category_0'] },
     '110': { id: '110', name: 'Анкета лида', active: 'Y', sort: '400', entityTypeId: ['1'] },
   },
 };
@@ -52,6 +67,7 @@ const docRaw = (id: number, extra: Record<string, unknown> = {}) => ({
   entityId: '5',
   createTime: '2026-10-06T10:00:00+03:00',
   pdfId: '2979',
+  pdfUrl: `https://p.bitrix24.invalid/ajax.php?action=getPdf&id=${String(id)}`,
   downloadUrl: `https://p.bitrix24.invalid/ajax.php?action=download&id=${String(id)}`,
   pdfUrlMachine: `https://p.bitrix24.invalid/${SECRET}crm.documentgenerator.document.getpdf/?token=xyz`,
   publicUrl: null,
@@ -59,6 +75,9 @@ const docRaw = (id: number, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 let docs: Record<string, unknown>[];
+/** Живой портал: document.get не присылает pdfId (только pdfUrl и т. п.). */
+const withoutPdfId = (d: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'pdfId'));
 
 const HISTORY = {
   chatId: 1763,
@@ -148,11 +167,12 @@ function setup(): void {
   mockCrmItems(t.bitrix);
   t.bitrix
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
-    .on('crm.deal.get', (c) =>
-      Number(c.body['id']) === 5
-        ? legacyOk(dealRecord(5))
-        : { status: 400, body: { error: 'NOT_FOUND', error_description: 'Not found' } },
-    )
+    .on('crm.deal.get', (c) => {
+      const id = Number(c.body['id']);
+      if (id === 5) return legacyOk(dealRecord(5));
+      if (id === 6) return legacyOk(dealRecord(6, { CATEGORY_ID: '5' }));
+      return { status: 400, body: { error: 'NOT_FOUND', error_description: 'Not found' } };
+    })
     .on(
       'imopenlines.config.list.get',
       legacyOk([{ ID: '1', LINE_NAME: 'Сайт и мессенджеры', ACTIVE: 'Y', QUEUE: [1, 2] }]),
@@ -166,7 +186,7 @@ function setup(): void {
     .on('crm.documentgenerator.document.get', (c) => {
       const d = docs.find((x) => Number(x['id']) === Number(c.body['id']));
       return d
-        ? legacyOk({ document: d })
+        ? legacyOk({ document: withoutPdfId(d) })
         : { status: 400, body: { error: '100', error_description: 'Document not found' } };
     })
     .on('crm.documentgenerator.document.add', (c) => {
@@ -284,7 +304,7 @@ describe('генератор документов CRM', () => {
     expect(
       (r.data?.['items'] as Record<string, unknown>[]).map((x) => [x['id'], x['name'], x['entityTypes']]),
     ).toEqual([
-      [175, 'Коммерческое предложение №', ['deal', 'quote']],
+      [175, 'Коммерческое предложение №', ['deal', 'quote', 'invoice']],
       [137, 'Договор', ['deal']],
     ]);
     noLinks(r.data);
@@ -317,7 +337,39 @@ describe('генератор документов CRM', () => {
     expect(JSON.stringify(r.data)).not.toContain('7700000000');
   });
 
-  it('crm_document_get: карточка без ссылок', async () => {
+  it('живые привязки «2_category_N»: шаблон подходит сделке только своей воронки; фильтр dealCategoryId; служебные коды пропущены', async () => {
+    const r = await call('crm_document_templates_list', { entityType: 'deal', dealCategoryId: 5 });
+    expect(r.data?.['items']).toEqual([
+      {
+        id: 175,
+        name: 'Коммерческое предложение №',
+        active: true,
+        entityTypes: ['deal', 'quote', 'invoice'],
+        dealCategoryIds: [0, 5],
+        numeratorId: 49,
+        sort: 100,
+      },
+    ]);
+    const wrong = await call('crm_document_create', {
+      templateId: 137,
+      entityType: 'deal',
+      recordId: 6,
+      dryRun: true,
+    });
+    expect(wrong.error?.details['reason']).toBe('TEMPLATE_ENTITY_MISMATCH');
+    expect(wrong.error?.message).toContain('воронкам: 0');
+    const right = await call('crm_document_create', {
+      templateId: 175,
+      entityType: 'deal',
+      recordId: 6,
+      dryRun: true,
+    });
+    expect(right.data?.['plan']).toMatchObject({
+      details: { templateId: 175, entityTypeId: 2, entityId: 6 },
+    });
+  });
+
+  it('crm_document_get: карточка без ссылок; готовность PDF без pdfId — по наличию pdfUrl', async () => {
     const r = await call('crm_document_get', { id: 833 });
     expect(r.data).toMatchObject({ id: 833, pdfReady: true, isTransformationError: false });
     noLinks(r.data);
