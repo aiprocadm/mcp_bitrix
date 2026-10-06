@@ -217,7 +217,8 @@ export const TASK_FIELDS = {
     TITLE: { title: 'Название', type: 'string', required: true },
     DESCRIPTION: { title: 'Описание', type: 'string' },
     RESPONSIBLE_ID: { title: 'Исполнитель', type: 'integer', required: true },
-    CREATED_BY: { title: 'Постановщик', type: 'integer' },
+    // как на живом портале (2026-10-05): getfields помечает постановщика обязательным, хотя add его не требует
+    CREATED_BY: { title: 'Постановщик', type: 'integer', required: true },
     ACCOMPLICES: { title: 'Соисполнители', type: 'integer' },
     AUDITORS: { title: 'Наблюдатели', type: 'integer' },
     DEADLINE: { title: 'Крайний срок', type: 'datetime' },
