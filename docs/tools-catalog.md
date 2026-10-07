@@ -37,6 +37,7 @@
 | `crm_activities_search` | crm | read | true | false | true | да | [json](schemas/crm_activities_search.json) |
 | `crm_activity_bindings` | crm | read | true | false | true | да | [json](schemas/crm_activity_bindings.json) |
 | `crm_call_transcript` | crm | read | true | false | true | да | [json](schemas/crm_call_transcript.json) |
+| `crm_activity_files` | crm | read | true | false | true | да | [json](schemas/crm_activity_files.json) |
 | `crm_document_templates_list` | crm | read | true | false | true | да | [json](schemas/crm_document_templates_list.json) |
 | `crm_documents_list` | crm | read | true | false | true | да | [json](schemas/crm_documents_list.json) |
 | `crm_document_get` | crm | read | true | false | true | да | [json](schemas/crm_document_get.json) |
@@ -85,6 +86,7 @@
 | `disk_children_list` | disk | read | true | false | true | да | [json](schemas/disk_children_list.json) |
 | `disk_search_files` | disk | read | true | false | true | да | [json](schemas/disk_search_files.json) |
 | `disk_delete_file` | disk | delete | false | true | false | да | [json](schemas/disk_delete_file.json) |
+| `disk_file_read` | disk | read | true | false | true | да | [json](schemas/disk_file_read.json) |
 | `employee_search` | company | read | true | false | true | да | [json](schemas/employee_search.json) |
 | `company_departments_list` | company | read | true | false | true | да | [json](schemas/company_departments_list.json) |
 | `company_department_create` | company | create | false | false | false | да | [json](schemas/company_department_create.json) |
@@ -256,6 +258,10 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `crm_call_transcript`
 
 Текст расшифровки звонка, сделанной ИИ Битрикс24 (crm.activity.call.getTranscript), по ID дела-звонка. Использовать, когда спрашивают «о чём говорили с клиентом». activityId — из crm_activities_search (kind=call) или crmActivityId в telephony_calls_list. Если расшифровки нет (не делалась, не готова, ошибка) — available=false. Сама запись разговора не выдаётся.
+
+### `crm_activity_files`
+
+Файлы, приложенные к делу CRM (письму, звонку, делу): ID файла Диска, имя, размер, читается ли (crm.activity.get → FILES, disk.file.get). Использовать, чтобы найти счёт или выписку во вложениях письма; затем disk_file_read по fileId. Ссылки не выдаются.
 
 ### `crm_document_templates_list`
 
@@ -448,6 +454,10 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `disk_delete_file`
 
 Удалить конкретный файл Диска Bitrix24, переместив его в корзину (disk.file.markDeleted); безвозвратное удаление не выполняется. Использовать, только когда пользователь явно просит удалить определённый файл по его ID (disk_children_list / disk_search_files). План показывает имя, размер, папку и дату изменения; expectedStateHash из dryRun защищает от удаления изменённого файла. Порядок: APPROVAL_REQUIRED → подтверждение человеком → повтор с approvalId; после записи файл перечитывается (должен быть в корзине).
+
+### `disk_file_read`
+
+Текст файла Диска или вложения CRM по ID файла: txt, csv, md, json, xml, html, pdf (текстовый слой), docx, xlsx (листы, ячейки через табуляцию). Использовать, чтобы прочитать счёт, выписку, акт или прайс, приложенные к сделке или письму; ID — из crm_activity_files, disk_children_list, disk_search_files. Файл скачивается на сервере, ссылка не выдаётся. Сканы без текстового слоя не распознаются. Длинный текст — частями: offset и maxChars.
 
 ### `employee_search`
 

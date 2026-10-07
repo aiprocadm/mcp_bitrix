@@ -16,6 +16,8 @@ export interface MockResponse {
   status?: number;
   body?: unknown;
   text?: string;
+  /** Двоичное тело (скачивание файла). */
+  bytes?: Uint8Array;
   headers?: Record<string, string>;
   /** Бросить сетевую ошибку вместо ответа (ответ потерян). */
   networkError?: string;
@@ -348,7 +350,7 @@ export class MockBitrix {
         throw e;
       }
       const text = resp.text ?? JSON.stringify(resp.body ?? {});
-      return new Response(text, {
+      return new Response(resp.bytes ? new Uint8Array(resp.bytes) : text, {
         status: resp.status ?? 200,
         headers: { 'content-type': 'application/json', ...(resp.headers ?? {}) },
       });

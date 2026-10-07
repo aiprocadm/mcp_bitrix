@@ -27,6 +27,7 @@ import {
   crmActivityBindingsTool,
   crmCallTranscriptTool,
 } from './crm/activities-search.js';
+import { crmActivityFilesTool, diskFileReadTool } from './disk/file-read.js';
 import { openlinesTools } from './openlines/openlines.js';
 import {
   crmActivitiesListTool,
@@ -97,6 +98,7 @@ export function allTools(): readonly ToolDefinition[] {
     crmActivitiesSearchTool,
     crmActivityBindingsTool,
     crmCallTranscriptTool,
+    crmActivityFilesTool,
     // генератор документов CRM (2026-10-06)
     crmDocumentTemplatesListTool,
     crmDocumentsListTool,
@@ -115,6 +117,7 @@ export function allTools(): readonly ToolDefinition[] {
     chatSendMessageTool,
     diskUploadFileTool,
     ...calendarDiskTools,
+    diskFileReadTool,
     // §9.2 сотрудники и оргструктура, §9.9 чаты и звонки, §9.11 группы
     ...companyChatTools,
     // §9.6 каталог, склады, заказы

@@ -270,6 +270,90 @@ export class BitrixClient {
     }
   }
 
+  /**
+   * Скачивание файла портала (DOWNLOAD_URL из disk.file.get) для извлечения текста на сервере.
+   * Адрес содержит авторизацию (у вебхука — его код в пути): он не логируется, не попадает в ошибки и не выходит из
+   * сервера. Только https (или протокол портала) и host из BITRIX_ALLOWED_HOSTS, без перенаправлений, с пределом
+   * размера и таймаутом загрузок; через общий лимитер портала.
+   */
+  async downloadFile(
+    url: string,
+    opts: { maxBytes: number; requestId?: string | undefined; signal?: AbortSignal | undefined },
+  ): Promise<{ bytes: Uint8Array; contentType: string }> {
+    const details = { method: 'disk.file.get', apiVersion: 'legacy' as const };
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new AppError('BITRIX_UPSTREAM_ERROR', 'Портал вернул некорректный адрес файла', details);
+    }
+    const portalProtocol = this.o.auth.portalOrigin ? new URL(this.o.auth.portalOrigin).protocol : 'https:';
+    if (parsed.protocol !== 'https:' && parsed.protocol !== portalProtocol) {
+      throw new AppError('BITRIX_UPSTREAM_ERROR', 'Адрес файла портала не https', details);
+    }
+    this.assertAllowedHost(url);
+    const release = await this.o.limiter.acquire(opts.signal);
+    const timeoutSignal = AbortSignal.timeout(this.o.uploadTimeoutMs);
+    const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
+    try {
+      let res: Response;
+      try {
+        res = await this.o.fetch(url, {
+          method: 'GET',
+          headers: { 'x-request-id': opts.requestId ?? randomUUID() },
+          signal,
+          redirect: 'manual',
+        });
+      } catch (e) {
+        const aborted = signal.aborted || (e instanceof Error && e.name === 'AbortError');
+        throw new AppError(
+          aborted ? 'BITRIX_TIMEOUT' : 'BITRIX_UPSTREAM_ERROR',
+          aborted
+            ? 'Таймаут скачивания файла из Bitrix24'
+            : 'Сетевая ошибка при скачивании файла из Bitrix24',
+          { ...details, retryable: true },
+        );
+      }
+      if (res.status >= 300 && res.status < 400) {
+        throw new AppError('BITRIX_UPSTREAM_ERROR', 'Bitrix24 перенаправил скачивание; переходы запрещены', {
+          ...details,
+          httpStatus: res.status,
+        });
+      }
+      if (res.status !== 200) {
+        const code =
+          res.status === 401 || res.status === 403
+            ? 'BITRIX_ACCESS_DENIED'
+            : res.status === 404
+              ? 'NOT_FOUND'
+              : 'BITRIX_UPSTREAM_ERROR';
+        throw new AppError(code, 'Bitrix24 не отдал файл', { ...details, httpStatus: res.status });
+      }
+      const tooLarge = () =>
+        new AppError('FILE_TOO_LARGE', `Файл больше предела ${String(opts.maxBytes)} байт`, {
+          ...details,
+          nextAction: 'Откройте файл в портале',
+        });
+      const declared = Number(res.headers.get('content-length') ?? '0');
+      if (declared > opts.maxBytes) throw tooLarge();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      if (res.body) {
+        for await (const value of res.body as AsyncIterable<Uint8Array>) {
+          size += value.byteLength;
+          if (size > opts.maxBytes) throw tooLarge();
+          chunks.push(value);
+        }
+      }
+      return {
+        bytes: new Uint8Array(Buffer.concat(chunks)),
+        contentType: res.headers.get('content-type') ?? '',
+      };
+    } finally {
+      release();
+    }
+  }
+
   private async readBodyLimited(
     res: Response,
     descriptor: MethodDescriptor,
