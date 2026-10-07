@@ -38,7 +38,7 @@ const ACTS = [
     START_TIME: '2026-10-07T09:00:00+03:00',
     DESCRIPTION: '<p>Поступила оплата&nbsp;<b>16 320 ₽</b></p>',
     DESCRIPTION_TYPE: '3',
-    COMMUNICATIONS: [{ VALUE: 'noreply@alfabank.ru' }],
+    COMMUNICATIONS: [{ VALUE: 'noreply@bank.example' }],
   },
   {
     ID: '502',
@@ -74,7 +74,7 @@ const TEMPLATES = [
             Type: 'IMNotifyActivity',
             Properties: { Title: 'Уведомление пользователя', MessageSite: 'секрет' },
           },
-          { Type: 'CrmCreateDealActivity', Properties: { Title: 'Создать сделку «Повторная продажа»' } },
+          { Type: 'CrmCreateDealActivity', Properties: { Title: 'Создать сделку «Повторная покупка»' } },
         ],
       },
     ],
@@ -177,7 +177,7 @@ describe('crm_activities_search', () => {
       owner: { entityType: 'deal', id: 62097 },
       description: 'Поступила оплата 16 320 ₽',
     });
-    expect(JSON.stringify(r.data)).not.toContain('alfabank');
+    expect(JSON.stringify(r.data)).not.toContain('bank.example');
   });
 
   it('boundTo → BINDINGS (дело находится по любой привязке); todo → PROVIDER_ID=CRM_TODO; без периода — предупреждение', async () => {
@@ -221,7 +221,7 @@ describe('бизнес-процессы', () => {
     expect(flattenActions(TEMPLATES[0]?.TEMPLATE ?? [])).toEqual([
       { depth: 0, type: 'SequentialWorkflowActivity', title: 'Последовательный бизнес-процесс' },
       { depth: 1, type: 'IMNotifyActivity', title: 'Уведомление пользователя' },
-      { depth: 1, type: 'CrmCreateDealActivity', title: 'Создать сделку «Повторная продажа»' },
+      { depth: 1, type: 'CrmCreateDealActivity', title: 'Создать сделку «Повторная покупка»' },
     ]);
   });
 
@@ -232,7 +232,7 @@ describe('бизнес-процессы', () => {
       [1001, 'CONTACT', 'manual'],
       [995, 'COMPANY', 'onCreateAndUpdate'],
     ]);
-    expect(JSON.stringify(items[0]?.['actions'])).toContain('Повторная продажа');
+    expect(JSON.stringify(items[0]?.['actions'])).toContain('Повторная покупка');
     expect(JSON.stringify(r.data)).not.toMatch(/SECRET_TOKEN|не выдавать|секрет/);
     expect(t.bitrix.callsTo('bizproc.workflow.template.list')[0]?.body['select']).not.toContain('CONSTANTS');
     const company = await call('bizproc_templates_list', { documentType: 'COMPANY' });
