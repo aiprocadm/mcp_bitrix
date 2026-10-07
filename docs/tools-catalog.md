@@ -34,6 +34,9 @@
 | `crm_status_create` | crm | create | false | false | false | да | [json](schemas/crm_status_create.json) |
 | `crm_status_update` | crm | update | false | false | true | да | [json](schemas/crm_status_update.json) |
 | `crm_pipelines_overview` | crm | read | true | false | true | да | [json](schemas/crm_pipelines_overview.json) |
+| `crm_activities_search` | crm | read | true | false | true | да | [json](schemas/crm_activities_search.json) |
+| `crm_activity_bindings` | crm | read | true | false | true | да | [json](schemas/crm_activity_bindings.json) |
+| `crm_call_transcript` | crm | read | true | false | true | да | [json](schemas/crm_call_transcript.json) |
 | `crm_document_templates_list` | crm | read | true | false | true | да | [json](schemas/crm_document_templates_list.json) |
 | `crm_documents_list` | crm | read | true | false | true | да | [json](schemas/crm_documents_list.json) |
 | `crm_document_get` | crm | read | true | false | true | да | [json](schemas/crm_document_get.json) |
@@ -129,6 +132,8 @@
 | `lists_list` | lists | read | true | false | true | да | [json](schemas/lists_list.json) |
 | `lists_fields_get` | lists | read | true | false | true | да | [json](schemas/lists_fields_get.json) |
 | `lists_elements_list` | lists | read | true | false | true | да | [json](schemas/lists_elements_list.json) |
+| `bizproc_templates_list` | bizproc | read | true | false | true | да | [json](schemas/bizproc_templates_list.json) |
+| `bizproc_workflows_list` | bizproc | read | true | false | true | да | [json](schemas/bizproc_workflows_list.json) |
 
 ## Описания
 
@@ -239,6 +244,18 @@
 ### `crm_pipelines_overview`
 
 entityType=deal — количество и суммы сделок по КАЖДОЙ воронке и её стадиям за период (выиграно/проиграно/в работе); entityType=lead — лиды по стадиям и по источникам (откуда пришли). Использовать для вопросов «как дела во всех воронках», «сколько лидов за месяц и откуда», «сколько лидов провалено». Одна воронка подробно — crm_pipeline_summary. Считается по ограниченной выборке (maxRecords, лимит времени): ответ сообщает scannedCount, hasMore и полноту — сужайте период. Суммы в разных валютах не складываются. Это снимок текущих стадий, не историческая конверсия.
+
+### `crm_activities_search`
+
+Дела CRM по всему порталу (crm.activity.list): письма, звонки, встречи, дела «Сделать». Фильтры: kind (email/call/meeting/task/todo) или providerId (CRM_EMAIL, VOXIMPLANT_CALL, CRM_TODO…), direction (incoming/outgoing), период по dateField, часть темы, ответственный, выполнено, boundTo — все дела, привязанные к записи (в т. ч. звонки, где запись не владелец). Использовать для вопросов «какие письма об оплате пришли сегодня», «какие звонки были по сделкам за неделю», «все звонки клиента». includeDescription — текст (у писем тело письма, HTML → текст, обрезка descriptionMaxChars). Контакты участников и вложения не отдаются. До 50 дел на страницу, продолжение — по cursor; без периода и boundTo выборка по всему порталу очень большая.
+
+### `crm_activity_bindings`
+
+Все записи CRM, к которым привязано дело (crm.activity.binding.list): например, звонок привязан к контакту, компании и сделке сразу. Использовать, когда по делу нужно понять, к какой сделке или клиенту оно относится. Возвращаются только записи, доступные пользователю вебхука.
+
+### `crm_call_transcript`
+
+Текст расшифровки звонка, сделанной ИИ Битрикс24 (crm.activity.call.getTranscript), по ID дела-звонка. Использовать, когда спрашивают «о чём говорили с клиентом». activityId — из crm_activities_search (kind=call) или crmActivityId в telephony_calls_list. Если расшифровки нет (не делалась, не готова, ошибка) — available=false. Сама запись разговора не выдаётся.
 
 ### `crm_document_templates_list`
 
@@ -466,7 +483,7 @@ entityType=deal — количество и суммы сделок по КАЖ�
 
 ### `telephony_calls_list`
 
-История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.
+История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); текст разговора — crm_call_transcript по crmActivityId (если ИИ Битрикс24 сделал расшифровку); номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.
 
 ### `workgroups_list`
 
@@ -619,6 +636,14 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `lists_elements_list`
 
 Элементы универсального списка (lists.element.get) с полями, подписанными по-человечески (название поля → значение). Использовать, когда спрашивают «что в списке/реестре», «найди элемент списка». nameContains — поиск по названию элемента. До 50 элементов на страницу, продолжение — по cursor.
+
+### `bizproc_templates_list`
+
+Шаблоны бизнес-процессов из дизайнера (bizproc.workflow.template.list): название, для чего (сделки, лиды, компании, списки), когда запускается (вручную / при создании / при изменении); includeActions — список действий шаблона (тип и название шага). Использовать, когда спрашивают «какая автоматизация создаёт задачи/сделки». Роботы стадий CRM в REST недоступны — их запуски видны в bizproc_workflows_list.
+
+### `bizproc_workflows_list`
+
+Работающие сейчас бизнес-процессы и роботы стадий (bizproc.workflow.instances): по какой записи, какой шаблон, когда и кем запущен (startedBy=0 — автоматически), не завис ли. Использовать, когда спрашивают «что автоматически происходит со сделкой», «почему сделка создалась сама». Шаблон, которого нет в bizproc_templates_list, помечается isStageAutomation=true — это роботы стадий (их настройки REST не отдаёт). Показываются только незавершённые процессы.
 
 ## Запланировано (ТЗ §9, не реализовано)
 

@@ -17,6 +17,7 @@ export const ALL_MODULES = [
   'groups',
   'openlines',
   'lists',
+  'bizproc',
 ] as const;
 
 export type ModuleName = (typeof ALL_MODULES)[number];

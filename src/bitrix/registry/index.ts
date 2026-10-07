@@ -2,6 +2,7 @@
 import { crmRequisitesMethods } from './crm-requisites.js';
 import { crmItemsMethods } from './crm-items.js';
 import { crmLinksMethods } from './crm-links.js';
+import { activitiesBizprocMethods } from './activities-bizproc.js';
 import { openlinesDocsListsMethods } from './openlines-docs-lists.js';
 import { tasksMethods } from './tasks.js';
 import { calendarDiskMethods } from './calendar-disk.js';
@@ -16,6 +17,7 @@ export const REGISTRY_GROUPS: readonly (readonly (readonly [string, MethodDescri
   crmRequisitesMethods,
   crmItemsMethods,
   crmLinksMethods,
+  activitiesBizprocMethods,
   openlinesDocsListsMethods,
   tasksMethods,
   calendarDiskMethods,

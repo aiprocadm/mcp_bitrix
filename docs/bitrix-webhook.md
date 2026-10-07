@@ -28,6 +28,7 @@
    | `knowledgeBase`                     | `landing` (классическая база), `note` (база знаний 2.0, REST 3.0)                                                                                                                      |
    | `openlines`                         | `imopenlines` (чтение переписки открытых линий)                                                                                                                                        |
    | `lists`                             | `lists` (чтение универсальных списков)                                                                                                                                                 |
+   | `bizproc`                           | `bizproc` (чтение шаблонов и запущенных бизнес-процессов)                                                                                                                              |
 
    `npm run doctor` и `bitrix_capabilities` покажут, каких прав не хватает.
 
