@@ -33,6 +33,12 @@
 | 13  | Полная версия              | ✅ 25.09 | срезы 10–11 (классический CRM, связанные данные) + срез 12: все модули §9.2–9.14 — `docs/modules/*.md`                                                                                                                                                                           |
 | 14  | Destructive-функции        | ✅ 25.09 | 6 delete-инструментов (`crm_delete_record`, `task_delete`, `task_checklist_delete`, `calendar_delete_event`, `company_department_delete`, `disk_delete_file`): impact в плане, CONFLICT, verify по отсутствию; скрыты без `ENABLE_DESTRUCTIVE_TOOLS`, только administrator       |
 
+## Что именно сделано (2026-10-07 — дела по порталу, расшифровка звонков, бизнес-процессы)
+
+- `crm_activities_search` (весь портал, фильтр `BINDINGS`), `crm_activity_bindings`, `crm_call_transcript`; модуль
+  `bizproc`: `bizproc_templates_list`, `bizproc_workflows_list` (роботы стадий видны как запуски шаблонов вне REST).
+- Подробности и что невозможно через вебхук — `docs/modules/activities-bizproc.md`. 127 инструментов.
+
 ## Что именно сделано (2026-10-06, часть 2 — открытые линии, документы, списки)
 
 - Модули `openlines` (scope `imopenlines`): `openlines_list`, `openlines_crm_chats`, `openlines_chat_history`;

@@ -223,6 +223,7 @@ export function moduleReadChecks(
     { module: 'openlines', tool: 'openlines_list', args: {} },
     { module: 'lists', tool: 'lists_list', args: { pageSize: 5 } },
     { module: 'crm', tool: 'crm_document_templates_list', args: {} },
+    { module: 'bizproc', tool: 'bizproc_templates_list', args: { pageSize: 5 } },
   ];
   if (userId > 0)
     checks.push({ module: 'calendar', tool: 'calendar_list', args: { type: 'user', ownerId: userId } });

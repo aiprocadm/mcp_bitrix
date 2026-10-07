@@ -21,6 +21,12 @@ import {
   crmDocumentTemplatesListTool,
 } from './crm/documents.js';
 import { listsTools } from './lists/lists.js';
+import { bizprocTools } from './bizproc/bizproc.js';
+import {
+  crmActivitiesSearchTool,
+  crmActivityBindingsTool,
+  crmCallTranscriptTool,
+} from './crm/activities-search.js';
 import { openlinesTools } from './openlines/openlines.js';
 import {
   crmActivitiesListTool,
@@ -87,6 +93,10 @@ export function allTools(): readonly ToolDefinition[] {
     crmStatusCreateTool,
     crmStatusUpdateTool,
     crmPipelinesOverviewTool,
+    // дела по всему порталу, привязки, расшифровка звонка (2026-10-07)
+    crmActivitiesSearchTool,
+    crmActivityBindingsTool,
+    crmCallTranscriptTool,
     // генератор документов CRM (2026-10-06)
     crmDocumentTemplatesListTool,
     crmDocumentsListTool,
@@ -116,5 +126,6 @@ export function allTools(): readonly ToolDefinition[] {
     // открытые линии и универсальные списки (2026-10-06)
     ...openlinesTools,
     ...listsTools,
+    ...bizprocTools,
   ];
 }

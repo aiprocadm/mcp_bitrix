@@ -35,7 +35,7 @@ const isoDate = z
   );
 
 /** TYPE_ID дел CRM: 1 — встреча, 2 — звонок, 3 — задача (старый тип), 4 — письмо. */
-const ACTIVITY_TYPE_IDS = { meeting: 1, call: 2, task: 3, email: 4 } as const;
+export const ACTIVITY_TYPE_IDS = { meeting: 1, call: 2, task: 3, email: 4 } as const;
 
 /**
  * Текст дела для ответа: DESCRIPTION_TYPE=3 — HTML (письма), переводится в обычный текст; длинный обрезается.

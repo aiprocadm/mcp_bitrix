@@ -23,6 +23,7 @@ const MODULE_PREFIXES: Record<string, string[]> = {
   groups: ['sonet_group.'],
   openlines: ['imopenlines.'],
   lists: ['lists.'],
+  bizproc: ['bizproc.'],
 };
 
 export function methodBelongsToModule(d: MethodDescriptor, module: string): boolean {

@@ -1,7 +1,7 @@
 {
-  "name": "telephony_calls_list",
-  "title": "История звонков",
-  "description": "История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); текст разговора — crm_call_transcript по crmActivityId (если ИИ Битрикс24 сделал расшифровку); номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.",
+  "name": "bizproc_templates_list",
+  "title": "Шаблоны бизнес-процессов",
+  "description": "Шаблоны бизнес-процессов из дизайнера (bizproc.workflow.template.list): название, для чего (сделки, лиды, компании, списки), когда запускается (вручную / при создании / при изменении); includeActions — список действий шаблона (тип и название шага). Использовать, когда спрашивают «какая автоматизация создаёт задачи/сделки». Роботы стадий CRM в REST недоступны — их запуски видны в bizproc_workflows_list.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,25 +12,21 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "from": {
+      "documentType": {
+        "description": "Только шаблоны для этого типа записи CRM",
         "type": "string",
-        "maxLength": 40,
-        "description": "Начало периода (ISO 8601, со смещением зоны)"
+        "enum": [
+          "LEAD",
+          "DEAL",
+          "CONTACT",
+          "COMPANY",
+          "QUOTE",
+          "SMART_INVOICE"
+        ]
       },
-      "to": {
-        "type": "string",
-        "maxLength": 40,
-        "description": "Конец периода (ISO 8601)"
-      },
-      "userId": {
-        "description": "Только звонки этого сотрудника",
-        "type": "integer",
-        "exclusiveMinimum": 0,
-        "maximum": 9007199254740991
-      },
-      "includePhoneNumbers": {
+      "includeActions": {
         "default": false,
-        "description": "Показать номер абонента полностью (персональные данные; по умолчанию маска ***1234)",
+        "description": "Добавить список действий (до 200 на шаблон)",
         "type": "boolean"
       },
       "pageSize": {
@@ -47,9 +43,7 @@
       }
     },
     "required": [
-      "from",
-      "to",
-      "includePhoneNumbers"
+      "includeActions"
     ],
     "additionalProperties": false
   },
@@ -74,11 +68,20 @@
                     "id": {
                       "type": "number"
                     },
-                    "callId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                    "name": {
+                      "type": "string"
+                    },
+                    "moduleId": {
+                      "type": "string"
+                    },
+                    "documentType": {
+                      "type": "string"
+                    },
+                    "autoExecute": {
+                      "type": "string"
+                    },
+                    "modified": {
+                      "type": "string"
                     },
                     "userId": {
                       "type": [
@@ -86,117 +89,49 @@
                         "null"
                       ]
                     },
-                    "type": {
-                      "type": "string"
-                    },
-                    "category": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "startDate": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "durationSec": {
-                      "type": "number"
-                    },
-                    "resultCode": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "resultReason": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "phoneNumber": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "lineNumber": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "crm": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "entityType": {
-                              "type": "string"
-                            },
-                            "entityId": {
-                              "type": [
-                                "number",
-                                "null"
-                              ]
-                            }
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "depth": {
+                            "type": "number"
                           },
-                          "required": [
-                            "entityType",
-                            "entityId"
-                          ],
-                          "additionalProperties": false
+                          "type": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
                         },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "crmActivityId": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
-                    },
-                    "hasRecording": {
-                      "type": "boolean"
+                        "required": [
+                          "depth",
+                          "type",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
-                    "callId",
-                    "userId",
-                    "type",
-                    "category",
-                    "startDate",
-                    "durationSec",
-                    "resultCode",
-                    "resultReason",
-                    "phoneNumber",
-                    "lineNumber",
-                    "crm",
-                    "crmActivityId",
-                    "hasRecording"
+                    "name",
+                    "moduleId",
+                    "documentType",
+                    "autoExecute",
+                    "modified",
+                    "userId"
                   ],
                   "additionalProperties": false
                 }
               },
               "returnedCount": {
                 "type": "number"
-              },
-              "total": {
-                "type": [
-                  "number",
-                  "null"
-                ]
               }
             },
             "required": [
               "items",
-              "returnedCount",
-              "total"
+              "returnedCount"
             ],
             "additionalProperties": false
           },

@@ -1,7 +1,7 @@
 {
-  "name": "bitrix_capabilities",
-  "title": "Возможности портала",
-  "description": "Проверяет, какие методы из реестра сервера существуют и доступны на портале (через method.get), какие запрещены политикой сервера и какие ещё не проверены. Использовать, когда инструмент вернул FEATURE_UNAVAILABLE или перед включением модуля. Доступность метода не гарантирует доступ ко всем объектам.",
+  "name": "crm_call_transcript",
+  "title": "Расшифровка звонка",
+  "description": "Текст расшифровки звонка, сделанной ИИ Битрикс24 (crm.activity.call.getTranscript), по ID дела-звонка. Использовать, когда спрашивают «о чём говорили с клиентом». activityId — из crm_activities_search (kind=call) или crmActivityId в telephony_calls_list. Если расшифровки нет (не делалась, не готова, ошибка) — available=false. Сама запись разговора не выдаётся.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -12,49 +12,23 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "module": {
-        "description": "Ограничить проверку одним модулем",
-        "type": "string",
-        "enum": [
-          "system",
-          "company",
-          "crm",
-          "tasks",
-          "calendar",
-          "chat",
-          "telephony",
-          "disk",
-          "knowledgeBase",
-          "smartProcesses",
-          "catalog",
-          "invoices",
-          "orders",
-          "feed",
-          "groups",
-          "openlines",
-          "lists",
-          "bizproc"
-        ]
+      "activityId": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "ID дела-звонка"
       },
-      "methods": {
-        "description": "Ограничить проверку перечисленными методами реестра (до 60)",
-        "minItems": 1,
-        "maxItems": 60,
-        "type": "array",
-        "items": {
-          "type": "string",
-          "maxLength": 100,
-          "pattern": "^[a-z][a-z0-9_.]*$"
-        }
-      },
-      "refresh": {
-        "default": false,
-        "description": "Игнорировать кэш (5 минут)",
-        "type": "boolean"
+      "maxChars": {
+        "default": 10000,
+        "description": "Предел длины текста",
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 50000
       }
     },
     "required": [
-      "refresh"
+      "activityId",
+      "maxChars"
     ],
     "additionalProperties": false
   },
@@ -71,59 +45,31 @@
           "data": {
             "type": "object",
             "properties": {
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "method": {
-                      "type": "string"
-                    },
-                    "apiVersion": {
-                      "type": "string",
-                      "enum": [
-                        "legacy",
-                        "v3"
-                      ]
-                    },
-                    "scope": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "supported",
-                        "unavailable",
-                        "unchecked",
-                        "forbidden-by-policy",
-                        "error"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "method",
-                    "apiVersion",
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
+              "activityId": {
+                "type": "number"
               },
-              "summary": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
+              "available": {
+                "type": "boolean"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "length": {
+                "type": "number"
               }
             },
             "required": [
-              "items",
-              "summary"
+              "activityId",
+              "available",
+              "text",
+              "truncated",
+              "length"
             ],
             "additionalProperties": false
           },
