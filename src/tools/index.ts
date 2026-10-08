@@ -28,6 +28,7 @@ import {
   crmCallTranscriptTool,
 } from './crm/activities-search.js';
 import { crmActivityFilesTool, diskFileReadTool } from './disk/file-read.js';
+import { chatFilesDownloadTool, diskFileDownloadTool } from './disk/file-download.js';
 import { openlinesTools } from './openlines/openlines.js';
 import {
   crmActivitiesListTool,
@@ -118,6 +119,8 @@ export function allTools(): readonly ToolDefinition[] {
     diskUploadFileTool,
     ...calendarDiskTools,
     diskFileReadTool,
+    diskFileDownloadTool,
+    chatFilesDownloadTool,
     // §9.2 сотрудники и оргструктура, §9.9 чаты и звонки, §9.11 группы
     ...companyChatTools,
     // §9.6 каталог, склады, заказы

@@ -163,6 +163,9 @@ const RawEnvSchema = z.object({
   UPLOAD_SCAN_REQUIRED: strictBool('UPLOAD_SCAN_REQUIRED').default(false),
   UPLOAD_SCANNER_URL: optionalString,
   ALLOW_REMOTE_FILE_URLS: strictBool('ALLOW_REMOTE_FILE_URLS').default(false),
+  /** Папка для скачанных с портала файлов (disk_file_download, chat_files_download); пусто — скачивание выключено. */
+  DOWNLOAD_DIR: optionalString,
+  MAX_DOWNLOAD_BYTES: intInRange('MAX_DOWNLOAD_BYTES', 1, 104_857_600).default(52_428_800),
 
   MCP_AUTH_MODE: z.enum(['local', 'oauth']).default('local'),
   MCP_AUTH_ISSUER: optionalString,
@@ -333,6 +336,9 @@ export interface AppConfig {
     readonly scanRequired: boolean;
     readonly scannerUrl: string | undefined;
     readonly allowRemoteFileUrls: boolean;
+    /** Куда сохранять скачанные файлы; undefined — скачивание на диск сервера выключено. */
+    readonly downloadDir: string | undefined;
+    readonly maxDownloadBytes: number;
   };
   readonly live: {
     readonly enabled: boolean;
@@ -823,6 +829,9 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (raw.UPLOAD_SCAN_REQUIRED && !raw.UPLOAD_SCANNER_URL) {
     throw configError('UPLOAD_SCANNER_URL', 'обязателен при UPLOAD_SCAN_REQUIRED=true');
   }
+  if (raw.DOWNLOAD_DIR && saas) {
+    throw configError('DOWNLOAD_DIR', 'скачивание на диск сервера — только DEPLOYMENT_MODE=single');
+  }
   if (raw.ALLOW_REMOTE_FILE_URLS) {
     throw configError('ALLOW_REMOTE_FILE_URLS', 'загрузка по произвольным URL запрещена ТЗ §8.5');
   }
@@ -918,6 +927,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       scanRequired: raw.UPLOAD_SCAN_REQUIRED,
       scannerUrl: raw.UPLOAD_SCANNER_URL,
       allowRemoteFileUrls: raw.ALLOW_REMOTE_FILE_URLS,
+      downloadDir: raw.DOWNLOAD_DIR ? resolve(raw.DOWNLOAD_DIR) : undefined,
+      maxDownloadBytes: raw.MAX_DOWNLOAD_BYTES,
     },
     live: {
       enabled: raw.LIVE_TESTS_ENABLED,

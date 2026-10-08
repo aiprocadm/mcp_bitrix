@@ -87,6 +87,8 @@
 | `disk_search_files` | disk | read | true | false | true | да | [json](schemas/disk_search_files.json) |
 | `disk_delete_file` | disk | delete | false | true | false | да | [json](schemas/disk_delete_file.json) |
 | `disk_file_read` | disk | read | true | false | true | да | [json](schemas/disk_file_read.json) |
+| `disk_file_download` | disk | read | true | false | true | да | [json](schemas/disk_file_download.json) |
+| `chat_files_download` | chat | read | true | false | true | да | [json](schemas/chat_files_download.json) |
 | `employee_search` | company | read | true | false | true | да | [json](schemas/employee_search.json) |
 | `company_departments_list` | company | read | true | false | true | да | [json](schemas/company_departments_list.json) |
 | `company_department_create` | company | create | false | false | false | да | [json](schemas/company_department_create.json) |
@@ -458,6 +460,14 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `disk_file_read`
 
 Текст файла Диска или вложения CRM по ID файла: txt, csv, md, json, xml, html, pdf (текстовый слой), docx, xlsx (листы, ячейки через табуляцию). Использовать, чтобы прочитать счёт, выписку, акт или прайс, приложенные к сделке или письму; ID — из crm_activity_files, disk_children_list, disk_search_files. Файл скачивается на сервере, ссылка не выдаётся. Сканы без текстового слоя не распознаются. Длинный текст — частями: offset и maxChars.
+
+### `disk_file_download`
+
+Сохранить сам файл Диска или вложения (любой формат: документ, таблица, картинка, запись звонка) в папку скачиваний сервера (DOWNLOAD_DIR). Использовать, когда пользователь просит забрать файл себе, а не прочитать текст; ID — из chat_messages_get (files[].id), crm_activity_files, disk_children_list. Портал не меняется. Уже скачанный файл не перезаписывается. Если DOWNLOAD_DIR не задан — FEATURE_UNAVAILABLE.
+
+### `chat_files_download`
+
+Скачать на сервер (DOWNLOAD_DIR) все файлы из переписки: документы, таблицы, картинки, записи — от новых к старым, имя «дата_ID_имя», опись _список-файлов.csv (дата, кто прислал, имя). dialogId — как в chat_messages_get. Использовать, когда пользователь просит забрать себе файлы чата или сотрудника. Портал не меняется, сообщения не отмечаются прочитанными. За вызов — до maxFiles новых файлов и maxSeconds секунд; если ответ complete=false — повторить с beforeMessageId=nextBeforeMessageId (уже скачанные пропускаются).
 
 ### `employee_search`
 

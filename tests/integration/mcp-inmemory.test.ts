@@ -43,12 +43,12 @@ describe('MCP через InMemoryTransport (T41)', () => {
   it('tools/list: в read-only видны только читающие инструменты, верные annotations и строгие схемы', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((x) => x.name).sort();
-    // mock.env включает все модули: видны ровно все читающие инструменты реестра (75 из 129), записи скрыты.
+    // mock.env включает все модули: видны ровно все читающие инструменты реестра (77 из 131), записи скрыты.
     const expected = allTools()
       .filter((d) => !isWriteOperation(d.operation))
       .map((d) => d.name)
       .sort();
-    expect(expected).toHaveLength(75);
+    expect(expected).toHaveLength(77);
     expect(names).toEqual(expected);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);

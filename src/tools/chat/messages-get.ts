@@ -27,12 +27,12 @@ import { defineTool, READ_ANNOTATIONS, type ToolContext } from '../types.js';
 const DIALOG_RE = /^(chat\d{1,15}|sg\d{1,15}|\d{1,15})$/;
 const MAX_TEXT = 4000;
 
-interface MsgState {
+export interface MsgState {
   direction: 'older' | 'newer';
   anchor: number | null;
 }
 
-interface Message {
+export interface Message {
   id: number;
   authorId: number;
   authorName: string | null;
@@ -43,7 +43,7 @@ interface Message {
   files: { id: number; name: string; type: string; size: number | null }[];
 }
 
-async function fetchMessages(ctx: ToolContext, dialogId: string, state: MsgState, limit: number) {
+export async function fetchMessages(ctx: ToolContext, dialogId: string, state: MsgState, limit: number) {
   const params: Record<string, JsonValue> = { DIALOG_ID: dialogId, LIMIT: limit };
   if (state.anchor !== null) params[state.direction === 'older' ? 'LAST_ID' : 'FIRST_ID'] = state.anchor;
   let r;

@@ -33,6 +33,12 @@
 | 13  | Полная версия              | ✅ 25.09 | срезы 10–11 (классический CRM, связанные данные) + срез 12: все модули §9.2–9.14 — `docs/modules/*.md`                                                                                                                                                                           |
 | 14  | Destructive-функции        | ✅ 25.09 | 6 delete-инструментов (`crm_delete_record`, `task_delete`, `task_checklist_delete`, `calendar_delete_event`, `company_department_delete`, `disk_delete_file`): impact в плане, CONFLICT, verify по отсутствию; скрыты без `ENABLE_DESTRUCTIVE_TOOLS`, только administrator       |
 
+## Что именно сделано (2026-10-08 — скачивание файлов)
+
+- `disk_file_download` (один файл Диска/вложения любого формата) и `chat_files_download` (все файлы диалога с описью
+  `_список-файлов.csv`) сохраняют файлы в `DOWNLOAD_DIR` (только `single`, по умолчанию выключено), предел файла
+  `MAX_DOWNLOAD_BYTES`. Портал только читается; подробности — `docs/modules/file-read.md`. 131 инструмент.
+
 ## Что именно сделано (2026-10-07 — чтение файлов)
 
 - `disk_file_read` (текст txt/csv/html/pdf/docx/xlsx, скачивание на сервере, ссылка не выдаётся) и `crm_activity_files`
