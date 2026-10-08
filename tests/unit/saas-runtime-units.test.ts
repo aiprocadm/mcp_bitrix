@@ -96,6 +96,7 @@ describe('конфигурация saas (сборка)', () => {
   it.each([
     ['MCP_AUTH_MODE', { MCP_AUTH_MODE: 'oauth' }],
     ['ADMIN_PANEL_ENABLED', { ADMIN_PANEL_ENABLED: 'true' }],
+    ['DOWNLOAD_DIR', { DOWNLOAD_DIR: './data/downloads' }],
     ['TRUSTED_PROXIES', { TRUSTED_PROXIES: 'not-an-ip' }],
     ['OAUTH_CODE_TTL_SEC', { OAUTH_CODE_TTL_SEC: '120' }],
     ['OAUTH_CIMD_ENABLED', { OAUTH_CIMD_ENABLED: 'yes' }],

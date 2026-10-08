@@ -11,14 +11,14 @@ import { ok } from '../../mcp/result.js';
 import { asText, idOf, idSchema, isObj, num, upstreamShapeError } from '../shared.js';
 import { defineTool, READ_ANNOTATIONS, type ToolContext } from '../types.js';
 
-interface DiskFileMeta {
+export interface DiskFileMeta {
   id: number;
   name: string;
   size: number | null;
   downloadUrl: string;
 }
 
-async function diskFile(ctx: ToolContext, id: number): Promise<DiskFileMeta> {
+export async function diskFile(ctx: ToolContext, id: number): Promise<DiskFileMeta> {
   const r = await ctx.bitrix.call(
     'legacy',
     'disk.file.get',
