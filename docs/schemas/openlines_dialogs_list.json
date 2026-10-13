@@ -1,0 +1,388 @@
+{
+  "name": "openlines_dialogs_list",
+  "title": "Диалоги открытых линий за период",
+  "description": "Все диалоги открытых линий (WhatsApp, Telegram, Max, чат сайта…) за период одной таблицей: канал, линия, оператор (ФИО), клиент и привязка CRM, дата последнего сообщения, сколько написали клиент и оператор, кто написал последним, ждёт ли клиент ответа (waitingReply), время первого ответа. Использовать для вопросов «кому не ответили в WhatsApp за неделю» (waitingOnly=true, channel=WhatsApp), «сколько обращений по каждому оператору». Переписка конкретного диалога — openlines_chat_history по sessionId. Диалоги ищутся по делам CRM открытых линий; до maxDialogs за вызов.",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string",
+        "maxLength": 40,
+        "description": "Начало периода (ISO 8601 с зоной)"
+      },
+      "to": {
+        "type": "string",
+        "maxLength": 40,
+        "description": "Конец периода"
+      },
+      "operatorId": {
+        "description": "Только диалоги этого оператора",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "lineId": {
+        "description": "Только эта открытая линия (ID из openlines_list)",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "channel": {
+        "description": "Только канал: WhatsApp, Telegram, Max, Viber, «Онлайн-чат сайта»…",
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 40
+      },
+      "waitingOnly": {
+        "default": false,
+        "description": "Только диалоги, где последним написал клиент (ждёт ответа)",
+        "type": "boolean"
+      },
+      "maxDialogs": {
+        "default": 150,
+        "description": "Сколько диалогов проверить за вызов",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      }
+    },
+    "required": [
+      "from",
+      "to",
+      "waitingOnly",
+      "maxDialogs"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "number"
+                    },
+                    "chatId": {
+                      "type": "number"
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "connectorId": {
+                      "type": "string"
+                    },
+                    "lineId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "lineName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "operatorId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "operatorName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "crm": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "messages": {
+                      "type": "number"
+                    },
+                    "clientMessages": {
+                      "type": "number"
+                    },
+                    "operatorMessages": {
+                      "type": "number"
+                    },
+                    "lastMessageAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastFrom": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "client",
+                            "operator"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "waitingReply": {
+                      "type": "boolean"
+                    },
+                    "operatorReplied": {
+                      "type": "boolean"
+                    },
+                    "firstReplyMinutes": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "closed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "chatId",
+                    "channel",
+                    "connectorId",
+                    "lineId",
+                    "lineName",
+                    "operatorId",
+                    "operatorName",
+                    "clientName",
+                    "crm",
+                    "messages",
+                    "clientMessages",
+                    "operatorMessages",
+                    "lastMessageAt",
+                    "lastFrom",
+                    "waitingReply",
+                    "operatorReplied",
+                    "firstReplyMinutes",
+                    "closed"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "returnedCount": {
+                "type": "number"
+              },
+              "checkedDialogs": {
+                "type": "number"
+              },
+              "waitingReply": {
+                "type": "number"
+              },
+              "complete": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "items",
+              "returnedCount",
+              "checkedDialogs",
+              "waitingReply",
+              "complete"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

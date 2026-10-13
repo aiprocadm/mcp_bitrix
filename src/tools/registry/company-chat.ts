@@ -11,12 +11,15 @@ import {
 } from '../company/department-write.js';
 import { companyDepartmentsListTool } from '../company/departments-list.js';
 import { companyEmployeeDepartmentsSetTool } from '../company/employee-departments.js';
-import { employeeSearchTool } from '../company/employee-search.js';
+import { employeeSearchTool, employeesGetTool } from '../company/employee-search.js';
 import { workgroupMembersListTool, workgroupsListTool } from '../groups/workgroups.js';
 import { telephonyCallsListTool } from '../telephony/calls-list.js';
+import { callsRecordingsDownloadTool } from '../telephony/recordings.js';
+import { callTranscribeTool } from '../telephony/transcribe.js';
 
 export const companyChatTools: readonly ToolDefinition[] = [
   employeeSearchTool,
+  employeesGetTool,
   companyDepartmentsListTool,
   companyDepartmentCreateTool,
   companyDepartmentUpdateTool,
@@ -25,6 +28,8 @@ export const companyChatTools: readonly ToolDefinition[] = [
   chatRecentListTool,
   chatMessagesGetTool,
   telephonyCallsListTool,
+  callsRecordingsDownloadTool,
+  callTranscribeTool,
   workgroupsListTool,
   workgroupMembersListTool,
 ];

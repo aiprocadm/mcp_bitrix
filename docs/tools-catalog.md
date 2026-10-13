@@ -34,6 +34,9 @@
 | `crm_status_create` | crm | create | false | false | false | да | [json](schemas/crm_status_create.json) |
 | `crm_status_update` | crm | update | false | false | true | да | [json](schemas/crm_status_update.json) |
 | `crm_pipelines_overview` | crm | read | true | false | true | да | [json](schemas/crm_pipelines_overview.json) |
+| `crm_export` | crm | read | true | false | true | да | [json](schemas/crm_export.json) |
+| `crm_count` | crm | read | true | false | true | да | [json](schemas/crm_count.json) |
+| `crm_orphans` | crm | read | true | false | true | да | [json](schemas/crm_orphans.json) |
 | `crm_activities_search` | crm | read | true | false | true | да | [json](schemas/crm_activities_search.json) |
 | `crm_activity_bindings` | crm | read | true | false | true | да | [json](schemas/crm_activity_bindings.json) |
 | `crm_call_transcript` | crm | read | true | false | true | да | [json](schemas/crm_call_transcript.json) |
@@ -90,6 +93,7 @@
 | `disk_file_download` | disk | read | true | false | true | да | [json](schemas/disk_file_download.json) |
 | `chat_files_download` | chat | read | true | false | true | да | [json](schemas/chat_files_download.json) |
 | `employee_search` | company | read | true | false | true | да | [json](schemas/employee_search.json) |
+| `employees_get` | company | read | true | false | true | да | [json](schemas/employees_get.json) |
 | `company_departments_list` | company | read | true | false | true | да | [json](schemas/company_departments_list.json) |
 | `company_department_create` | company | create | false | false | false | да | [json](schemas/company_department_create.json) |
 | `company_department_update` | company | update | false | false | true | да | [json](schemas/company_department_update.json) |
@@ -98,6 +102,8 @@
 | `chat_recent_list` | chat | read | true | false | true | да | [json](schemas/chat_recent_list.json) |
 | `chat_messages_get` | chat | read | true | false | true | да | [json](schemas/chat_messages_get.json) |
 | `telephony_calls_list` | telephony | read | true | false | true | да | [json](schemas/telephony_calls_list.json) |
+| `calls_recordings_download` | telephony | read | true | false | true | да | [json](schemas/calls_recordings_download.json) |
+| `call_transcribe` | telephony | read | true | false | true | да | [json](schemas/call_transcribe.json) |
 | `workgroups_list` | groups | read | true | false | true | да | [json](schemas/workgroups_list.json) |
 | `workgroup_members_list` | groups | read | true | false | true | да | [json](schemas/workgroup_members_list.json) |
 | `catalog_list` | catalog | read | true | false | true | да | [json](schemas/catalog_list.json) |
@@ -133,6 +139,8 @@
 | `openlines_list` | openlines | read | true | false | true | да | [json](schemas/openlines_list.json) |
 | `openlines_crm_chats` | openlines | read | true | false | true | да | [json](schemas/openlines_crm_chats.json) |
 | `openlines_chat_history` | openlines | read | true | false | true | да | [json](schemas/openlines_chat_history.json) |
+| `openlines_dialogs_list` | openlines | read | true | false | true | да | [json](schemas/openlines_dialogs_list.json) |
+| `openlines_chat_export` | openlines | read | true | false | true | да | [json](schemas/openlines_chat_export.json) |
 | `lists_list` | lists | read | true | false | true | да | [json](schemas/lists_list.json) |
 | `lists_fields_get` | lists | read | true | false | true | да | [json](schemas/lists_fields_get.json) |
 | `lists_elements_list` | lists | read | true | false | true | да | [json](schemas/lists_elements_list.json) |
@@ -163,7 +171,7 @@
 
 ### `crm_list_records`
 
-Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета, коммерческие предложения) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {">=DATE_CREATE": "2026-09-01", "%TITLE": "договор"}. smart (нужен entityTypeId), invoice и quote идут через crm.item.list: поля camelCase, например {">=createdTime": "2026-09-01", "%title": "договор"}; регистр автоматически не переводится. Поля проверяются по схеме портала (crm_fields_get). Одна страница до 50 записей; продолжение — по cursor из ответа.
+Страница записей CRM (сделки, лиды, контакты, компании, элементы смарт-процессов, новые счета, коммерческие предложения) с фильтром, сортировкой и выбором полей. Использовать, когда нужен список записей по условию: стадия, ответственный, даты, часть названия. Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {">=DATE_CREATE": "2026-09-01", "%TITLE": "договор"}. smart (нужен entityTypeId), invoice и quote идут через crm.item.list: поля camelCase, например {">=createdTime": "2026-09-01", "%title": "договор"}; регистр автоматически не переводится. Поля проверяются по схеме портала (crm_fields_get). «!%ПОЛЕ» (не содержит) проверяется сервером MCP. compact=true — только ID, название, дата, ответственный и без пустых полей; withNames=true — рядом с ID сотрудника, компании, стадии их имена (поле *_NAME). Одна страница до 50 записей; продолжение — по cursor из ответа (pageSize при продолжении можно менять). Если нужна вся выборка или число — crm_export (файл) и crm_count (итоги) вместо листания.
 
 ### `crm_get_record`
 
@@ -248,6 +256,18 @@
 ### `crm_pipelines_overview`
 
 entityType=deal — количество и суммы сделок по КАЖДОЙ воронке и её стадиям за период (выиграно/проиграно/в работе); entityType=lead — лиды по стадиям и по источникам (откуда пришли). Использовать для вопросов «как дела во всех воронках», «сколько лидов за месяц и откуда», «сколько лидов провалено». Одна воронка подробно — crm_pipeline_summary. Считается по ограниченной выборке (maxRecords, лимит времени): ответ сообщает scannedCount, hasMore и полноту — сужайте период. Суммы в разных валютах не складываются. Это снимок текущих стадий, не историческая конверсия.
+
+### `crm_export`
+
+Выгрузить ВСЕ записи CRM по фильтру (сделки, лиды, контакты, компании) в файл XLSX или CSV в папке скачиваний сервера (DOWNLOAD_DIR) одной командой: сервер сам перебирает все страницы, добавляет колонки с именами (ответственный → ФИО, компания → название, стадия, источник) и ссылку на карточку. Использовать вместо листания crm_list_records, когда записей больше пары страниц или нужна таблица: «все компании Иванова», «все лиды за год». В ответе — путь к файлу, число строк и первые 5 строк. Фильтр как в crm_list_records; «!%ПОЛЕ» (не содержит) проверяется сервером. За вызов — до maxSeconds секунд; если complete=false — повторить с cursor (тот же файл продолжится). Портал не меняется.
+
+### `crm_count`
+
+Посчитать записи CRM (сделки, лиды, контакты, компании) по фильтру на сервере и сгруппировать: по ответственному, стадии, источнику, воронке, любому полю или по дате (groupBy=DATE_CREATE, period=month). Ответ — таблица итогов: группа, название (ФИО, название стадии), количество, сумма поля sumField (например OPPORTUNITY). Использовать для вопросов «сколько лидов за сентябрь по источникам», «сделки по менеджерам», «сколько компаний создано по месяцам» — вместо листания записей. Без groupBy — просто число. Фильтр как в crm_list_records. Долгий подсчёт: complete=false и cursor — повторить с ним.
+
+### `crm_orphans`
+
+Найти компании или контакты БЕЗ сделок (without=deals), без лидов (leads) или без дел за последние activityDays дней (activities) — по всей базе или по фильтру (например {">=DATE_CREATE": "2026-01-01"}). Сервер сам перебирает записи и проверяет связи пачками; результат — файл XLSX/CSV в DOWNLOAD_DIR (ID, название, ответственный, дата, ссылка) и число найденных. Использовать для вопросов «компании без сделок за всё время», «контакты без дел за полгода» — вместо выгрузки ID и ручной проверки. Долгий обход: complete=false и cursor — повторить с ним. Портал не меняется.
 
 ### `crm_activities_search`
 
@@ -473,6 +493,10 @@ entityType=deal — количество и суммы сделок по КАЖ�
 
 Найти сотрудников по ФИО, должности или названию отдела (user.search). Возвращает минимум для идентификации: ID, ФИО, должность, отделы, активность — без телефонов, email и дат рождения. Использовать, чтобы узнать ID сотрудника перед назначением ответственным, руководителем отдела или отправкой сообщения. Если кандидатов несколько (ambiguous=true, в том числе полные однофамильцы), сервер НЕ выбирает сам: покажите список пользователю и попросите выбрать ID.
 
+### `employees_get`
+
+ФИО, должность и активность сотрудников по списку ID (до 200), включая уволенных и отключённых (user.get). Использовать, когда есть ID ответственного (ASSIGNED_BY_ID, userId, RESPONSIBLE_ID) и нужно имя, а employee_search не находит человека, потому что он уволен. Только минимальные поля — без телефонов и email.
+
 ### `company_departments_list`
 
 Список подразделений оргструктуры (department.get): ID, название, родитель, руководитель и stateHash для изменений. Использовать, чтобы найти ID отдела, построить дерево (parentId) или получить expectedStateHash перед company_department_update/delete. Фильтры: id — один отдел, parentId — прямые подотделы. Команды и матричные связи новой оргструктуры этим методом не покрываются.
@@ -503,7 +527,15 @@ entityType=deal — количество и суммы сделок по КАЖ�
 
 ### `telephony_calls_list`
 
-История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); текст разговора — crm_call_transcript по crmActivityId (если ИИ Битрикс24 сделал расшифровку); номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.
+История звонков портала за период (voximplant.statistic.get): время, направление, длительность, состоялся ли разговор, сотрудник (ФИО), привязка к CRM, recordFileId — ID файла записи на Диске. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Фильтры сервера: direction, status (answered/missed), minDurationSec, lineNumber, crmBound, phoneLast4. mode=summary — вместо списка сводка по сотрудникам и линиям (всего, входящие, исходящие, отвечено, пропущено, минуты разговора) одним вызовом. Ссылок на записи нет: запись скачать — disk_file_download по recordFileId или calls_recordings_download за период; текст — call_transcribe. Номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.
+
+### `calls_recordings_download`
+
+Скачать на сервер (DOWNLOAD_DIR) записи разговоров за период одной командой: по сотруднику, направлению, длительности и другим фильтрам telephony_calls_list. Имена файлов: «дата_время_сотрудник_вх|исх_длительность_call<ID>», опись _список-файлов.csv (дата, сотрудник, направление, длительность, номер под маской, ID дела). Использовать, когда нужно прослушать или перевести в текст разговоры менеджера за неделю или месяц (затем call_transcribe по пути файла). Звонки без записи пропускаются. За вызов — до maxFiles новых файлов и maxSeconds секунд; если complete=false — повторить тот же вызов (скачанные пропустятся). Портал не меняется.
+
+### `call_transcribe`
+
+Перевести запись разговора в текст на этом сервере (faster-whisper, запись никуда не отправляется): текст с отметками времени, для стерео-записей — по собеседникам («Собеседник 1/2» — каналы записи). Источник: activityId (дело-звонок, crmActivityId из telephony_calls_list), recordFileId (из telephony_calls_list) или file — путь в DOWNLOAD_DIR из calls_recordings_download («звонки/имя.mp3»). Использовать, когда нужно узнать, о чём говорили, что обещали, почему клиент не купил, а crm_call_transcript пуст. Текст сохраняется рядом с записью; повтор не распознаёт заново. Сохранить в CRM — crm_timeline_comment_add (crmTarget из ответа), с подтверждением. Выключено, пока администратор не задал TRANSCRIBE_PYTHON.
 
 ### `workgroups_list`
 
@@ -643,7 +675,15 @@ entityType=deal — количество и суммы сделок по КАЖ�
 
 ### `openlines_chat_history`
 
-Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений.
+Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений. from/to — сообщения за период, textOnly=true — без системных строк. Весь список диалогов за период — openlines_dialogs_list, переписка в файл — openlines_chat_export.
+
+### `openlines_dialogs_list`
+
+Все диалоги открытых линий (WhatsApp, Telegram, Max, чат сайта…) за период одной таблицей: канал, линия, оператор (ФИО), клиент и привязка CRM, дата последнего сообщения, сколько написали клиент и оператор, кто написал последним, ждёт ли клиент ответа (waitingReply), время первого ответа. Использовать для вопросов «кому не ответили в WhatsApp за неделю» (waitingOnly=true, channel=WhatsApp), «сколько обращений по каждому оператору». Переписка конкретного диалога — openlines_chat_history по sessionId. Диалоги ищутся по делам CRM открытых линий; до maxDialogs за вызов.
+
+### `openlines_chat_export`
+
+Сохранить переписку диалога открытой линии в текстовый файл в DOWNLOAD_DIR: «дата время — автор: текст», с именами файлов-вложений. Использовать, когда переписка длинная и нужна целиком (прочитать, переслать, разобрать), а не в ответе. chatId или sessionId — из openlines_dialogs_list или openlines_crm_chats. textOnly=true — без системных строк. Портал не меняется.
 
 ### `lists_list`
 

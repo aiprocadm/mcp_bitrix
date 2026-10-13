@@ -135,7 +135,7 @@ export async function legacyListPage(
     tool: string;
     method: string;
     params: JsonObject;
-    /** Всё, что определяет выборку (фильтр, порядок, pageSize): курсор к ним привязан (T21). */
+    /** Всё, что определяет выборку (фильтр, порядок, поля): курсор к ним привязан (T21). Размер страницы можно менять. */
     bindingParts: Record<string, unknown>;
     pageSize: number;
     cursor: string | undefined;
@@ -144,7 +144,7 @@ export async function legacyListPage(
 ): Promise<PageResult> {
   return paginateLegacy({
     store: ctx.cursors,
-    binding: cursorBinding(ctx, opts.tool, { ...opts.bindingParts, pageSize: opts.pageSize }),
+    binding: cursorBinding(ctx, opts.tool, opts.bindingParts),
     cursor: opts.cursor,
     pageSize: opts.pageSize,
     fetchPage: async (start) => {

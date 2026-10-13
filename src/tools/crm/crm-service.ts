@@ -9,6 +9,7 @@ import { bindingHash, paginateLegacy, type PageResult } from '../../bitrix/pagin
 import { AppError } from '../../errors/app-error.js';
 import { stateHash } from '../../security/idempotency.js';
 import type { ToolContext } from '../types.js';
+import { passesLocal, type LocalCondition } from './bulk.js';
 import { asText, parseFieldsResult, type DealFieldsMeta } from './deal-fields.js';
 import { dealStageEntityId, type ClassicEntity } from './entities.js';
 
@@ -44,6 +45,8 @@ export interface ListArgs {
   select: string[] | undefined;
   pageSize: number;
   cursor: string | undefined;
+  /** Условия, проверяемые сервером MCP (`!%` — не содержит); их поля добавляются в select. */
+  local?: readonly LocalCondition[];
 }
 
 export async function listRecords(
@@ -61,23 +64,30 @@ export async function listRecords(
       filter: args.filter,
       order: args.order,
       select: args.select,
-      pageSize: args.pageSize,
+      local: args.local ?? [],
     }),
   };
+  const local = args.local ?? [];
+  const select =
+    args.select && local.length ? [...new Set([...args.select, ...local.map((c) => c.field)])] : args.select;
   return paginateLegacy({
     store: ctx.cursors,
     binding,
     cursor: args.cursor,
     pageSize: args.pageSize,
+    maxUpstreamCalls: local.length ? 6 : 2,
     fetchPage: async (start) => {
       const params: JsonObject = { filter: args.filter, order: args.order, start };
-      if (args.select) params['select'] = args.select;
+      if (select) params['select'] = select;
       const r = await ctx.bitrix.call('legacy', method, params, {
         requestId: ctx.requestId,
         signal: ctx.signal,
       });
       if (!Array.isArray(r.result)) throw upstream(method, `${method} вернул не массив`);
-      return { items: r.result, next: r.next, total: r.total };
+      const items = local.length
+        ? r.result.filter((x) => !!x && typeof x === 'object' && !Array.isArray(x) && passesLocal(x, local))
+        : r.result;
+      return { items, next: r.next, total: local.length ? undefined : r.total };
     },
   });
 }

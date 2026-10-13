@@ -16,6 +16,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY policies ./policies
+COPY scripts/transcribe ./scripts/transcribe
 RUN mkdir -p /app/data && chown -R mcp:mcp /app
 USER mcp
 # Без ENTRYPOINT: тогда `docker compose run --rm bitrix24-mcp node dist/cli/setup.js ...` запускает именно CLI,

@@ -166,6 +166,22 @@ const RawEnvSchema = z.object({
   /** Папка для скачанных с портала файлов (disk_file_download, chat_files_download); пусто — скачивание выключено. */
   DOWNLOAD_DIR: optionalString,
   MAX_DOWNLOAD_BYTES: intInRange('MAX_DOWNLOAD_BYTES', 1, 104_857_600).default(52_428_800),
+  /** Расшифровка записей звонков на сервере (call_transcribe): python с установленным faster-whisper; пусто — выключено. */
+  TRANSCRIBE_PYTHON: optionalString,
+  TRANSCRIBE_SCRIPT: optionalString,
+  TRANSCRIBE_MODEL: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._/-]{1,200}$/, 'имя или путь модели faster-whisper')
+    .default('small'),
+  TRANSCRIBE_LANGUAGE: z
+    .string()
+    .trim()
+    .regex(/^[a-z]{2,3}$/)
+    .default('ru'),
+  /** Слова компании для подсказки распознаванию (названия, термины), через запятую. */
+  TRANSCRIBE_HOTWORDS: optionalString,
+  TRANSCRIBE_TIMEOUT_SECONDS: intInRange('TRANSCRIBE_TIMEOUT_SECONDS', 10, 3600).default(900),
 
   MCP_AUTH_MODE: z.enum(['local', 'oauth']).default('local'),
   MCP_AUTH_ISSUER: optionalString,
@@ -339,6 +355,17 @@ export interface AppConfig {
     /** Куда сохранять скачанные файлы; undefined — скачивание на диск сервера выключено. */
     readonly downloadDir: string | undefined;
     readonly maxDownloadBytes: number;
+    /** Расшифровка записей звонков локально (faster-whisper); undefined — выключено. */
+    readonly transcribe:
+      | {
+          readonly python: string;
+          readonly script: string | undefined;
+          readonly model: string;
+          readonly language: string;
+          readonly hotwords: string | undefined;
+          readonly timeoutSeconds: number;
+        }
+      | undefined;
   };
   readonly live: {
     readonly enabled: boolean;
@@ -832,6 +859,9 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (raw.DOWNLOAD_DIR && saas) {
     throw configError('DOWNLOAD_DIR', 'скачивание на диск сервера — только DEPLOYMENT_MODE=single');
   }
+  if (raw.TRANSCRIBE_PYTHON && saas) {
+    throw configError('TRANSCRIBE_PYTHON', 'расшифровка записей на сервере — только DEPLOYMENT_MODE=single');
+  }
   if (raw.ALLOW_REMOTE_FILE_URLS) {
     throw configError('ALLOW_REMOTE_FILE_URLS', 'загрузка по произвольным URL запрещена ТЗ §8.5');
   }
@@ -929,6 +959,16 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       allowRemoteFileUrls: raw.ALLOW_REMOTE_FILE_URLS,
       downloadDir: raw.DOWNLOAD_DIR ? resolve(raw.DOWNLOAD_DIR) : undefined,
       maxDownloadBytes: raw.MAX_DOWNLOAD_BYTES,
+      transcribe: raw.TRANSCRIBE_PYTHON
+        ? {
+            python: raw.TRANSCRIBE_PYTHON,
+            script: raw.TRANSCRIBE_SCRIPT ? resolve(raw.TRANSCRIBE_SCRIPT) : undefined,
+            model: raw.TRANSCRIBE_MODEL,
+            language: raw.TRANSCRIBE_LANGUAGE,
+            hotwords: raw.TRANSCRIBE_HOTWORDS,
+            timeoutSeconds: raw.TRANSCRIBE_TIMEOUT_SECONDS,
+          }
+        : undefined,
     },
     live: {
       enabled: raw.LIVE_TESTS_ENABLED,

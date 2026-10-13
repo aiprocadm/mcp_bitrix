@@ -6,6 +6,9 @@ import { crmCreateRecordTool } from './crm/create-record.js';
 import { crmFieldsGetTool } from './crm/fields-get.js';
 import { crmGetRecordTool } from './crm/get-record.js';
 import { crmListRecordsTool } from './crm/list-records.js';
+import { crmCountTool } from './crm/count.js';
+import { crmExportTool } from './crm/export.js';
+import { crmOrphansTool } from './crm/orphans.js';
 import {
   crmContactCompaniesListTool,
   crmContactCompanyAddTool,
@@ -30,6 +33,7 @@ import {
 import { crmActivityFilesTool, diskFileReadTool } from './disk/file-read.js';
 import { chatFilesDownloadTool, diskFileDownloadTool } from './disk/file-download.js';
 import { openlinesTools } from './openlines/openlines.js';
+import { openlinesChatExportTool, openlinesDialogsListTool } from './openlines/dialogs.js';
 import {
   crmActivitiesListTool,
   crmDealProductsGetTool,
@@ -95,6 +99,10 @@ export function allTools(): readonly ToolDefinition[] {
     crmStatusCreateTool,
     crmStatusUpdateTool,
     crmPipelinesOverviewTool,
+    // выгрузка в файл и подсчёты на сервере (заявка 2026-10-13)
+    crmExportTool,
+    crmCountTool,
+    crmOrphansTool,
     // дела по всему порталу, привязки, расшифровка звонка (2026-10-07)
     crmActivitiesSearchTool,
     crmActivityBindingsTool,
@@ -131,6 +139,8 @@ export function allTools(): readonly ToolDefinition[] {
     ...noteTools,
     // открытые линии и универсальные списки (2026-10-06)
     ...openlinesTools,
+    openlinesDialogsListTool,
+    openlinesChatExportTool,
     ...listsTools,
     ...bizprocTools,
   ];

@@ -1,0 +1,366 @@
+{
+  "name": "crm_count",
+  "title": "Подсчёт записей CRM по группам",
+  "description": "Посчитать записи CRM (сделки, лиды, контакты, компании) по фильтру на сервере и сгруппировать: по ответственному, стадии, источнику, воронке, любому полю или по дате (groupBy=DATE_CREATE, period=month). Ответ — таблица итогов: группа, название (ФИО, название стадии), количество, сумма поля sumField (например OPPORTUNITY). Использовать для вопросов «сколько лидов за сентябрь по источникам», «сделки по менеджерам», «сколько компаний создано по месяцам» — вместо листания записей. Без groupBy — просто число. Фильтр как в crm_list_records. Долгий подсчёт: complete=false и cursor — повторить с ним.",
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "entityType": {
+        "type": "string",
+        "enum": [
+          "deal",
+          "lead",
+          "contact",
+          "company"
+        ],
+        "description": "Тип сущности классического CRM: deal (сделка), lead (лид), contact (контакт), company (компания)"
+      },
+      "filter": {
+        "default": {},
+        "description": "Фильтр как в crm_list_records: {\">=DATE_CREATE\": \"2026-01-01\", \"ASSIGNED_BY_ID\": 5, \"!%TITLE\": \"тест\"}",
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "groupBy": {
+        "description": "Поле группировки: ASSIGNED_BY_ID, STAGE_ID, STATUS_ID, SOURCE_ID, CATEGORY_ID, DATE_CREATE…",
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]{0,99}$"
+      },
+      "period": {
+        "default": "month",
+        "description": "Шаг для группировки по дате",
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ]
+      },
+      "sumField": {
+        "description": "Числовое поле для суммы по группам, например OPPORTUNITY",
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]{0,99}$"
+      },
+      "top": {
+        "default": 100,
+        "description": "Сколько групп показать; остальные — одной строкой",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      },
+      "maxSeconds": {
+        "default": 90,
+        "description": "Сколько секунд работать за вызов; не успел — complete=false и cursor для продолжения",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 600
+      },
+      "cursor": {
+        "description": "cursor из прошлого ответа с complete=false: продолжить ту же выгрузку (остальные параметры те же)",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "entityType",
+      "filter",
+      "period",
+      "top",
+      "maxSeconds"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string"
+              },
+              "total": {
+                "type": "number"
+              },
+              "groupBy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "number"
+                    },
+                    "sum": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "groupCount": {
+                "type": "number"
+              },
+              "sumTotal": {
+                "type": "number"
+              },
+              "complete": {
+                "type": "boolean"
+              },
+              "cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "entityType",
+              "total",
+              "groupBy",
+              "groups",
+              "groupCount",
+              "complete",
+              "cursor"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              },
+              "attempts": {
+                "type": "number"
+              },
+              "page": {
+                "type": "object",
+                "properties": {
+                  "nextCursor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hasMore": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nextCursor",
+                  "hasMore"
+                ],
+                "additionalProperties": false
+              },
+              "completeness": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs",
+              "completeness",
+              "warnings"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "CONFIG_INVALID",
+                  "BITRIX_AUTH_FAILED",
+                  "BITRIX_SCOPE_MISSING",
+                  "BITRIX_ACCESS_DENIED",
+                  "BITRIX_APP_CONTEXT_REQUIRED",
+                  "FEATURE_UNAVAILABLE",
+                  "METHOD_NOT_ALLOWED",
+                  "VALIDATION_ERROR",
+                  "BITRIX_RATE_LIMITED",
+                  "BITRIX_RESOURCE_LIMITED",
+                  "BITRIX_TIMEOUT",
+                  "BITRIX_UPSTREAM_ERROR",
+                  "OPERATION_OUTCOME_UNKNOWN",
+                  "NOT_FOUND",
+                  "READ_ONLY_MODE",
+                  "APPROVAL_REQUIRED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_MISMATCH",
+                  "CONFLICT",
+                  "IDEMPOTENCY_CONFLICT",
+                  "PARTIAL_SUCCESS",
+                  "FILE_TOO_LARGE",
+                  "UNSAFE_FILE",
+                  "AUDIT_UNAVAILABLE",
+                  "ACCESS_DENIED",
+                  "RATE_LIMITED",
+                  "QUOTA_EXCEEDED",
+                  "SUBSCRIPTION_INACTIVE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "v3"
+                ]
+              },
+              "durationMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "requestId",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

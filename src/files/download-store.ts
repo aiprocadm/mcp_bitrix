@@ -92,7 +92,7 @@ export async function saveNewFile(file: string, bytes: Uint8Array): Promise<bool
   }
 }
 
-const csvCell = (v: string | number | null) => {
+export const csvCell = (v: string | number | null) => {
   const s = v === null ? '' : String(v);
   // Защита от формул при открытии в Excel: ячейка, начинающаяся с = + - @, получает апостроф.
   const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;

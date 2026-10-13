@@ -105,6 +105,11 @@
         "minimum": 200,
         "maximum": 20000
       },
+      "withNames": {
+        "default": true,
+        "description": "Добавить responsibleName — ФИО ответственного (в т. ч. уволенного)",
+        "type": "boolean"
+      },
       "pageSize": {
         "description": "1..50, по умолчанию DEFAULT_PAGE_SIZE",
         "type": "integer",
@@ -121,7 +126,8 @@
     "required": [
       "dateField",
       "includeDescription",
-      "descriptionMaxChars"
+      "descriptionMaxChars",
+      "withNames"
     ],
     "additionalProperties": false
   },
