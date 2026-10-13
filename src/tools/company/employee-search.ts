@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { JsonObject } from '../../bitrix/legacy-adapter.js';
 import { ok } from '../../mcp/result.js';
 import { pageArgsShape } from '../../schemas/common.js';
-import { idSchema, pageMeta, pageSizeOf } from '../shared.js';
+import { idSchema, pageMeta, pageSizeOf, upstreamShapeError } from '../shared.js';
 import { defineTool, READ_ANNOTATIONS, type ToolContext } from '../types.js';
 import { EMPLOYEE_SELECT, findDepartment, normalizeEmployee, type Employee } from './company-service.js';
 import { offsetPage } from './offset-page.js';
@@ -143,6 +143,75 @@ export const employeeSearchTool = defineTool({
         selectionRequired: ambiguous,
       },
       pageMeta(ctx, 'user.search', page, 'legacy', warnings),
+    );
+  },
+});
+
+/**
+ * employees_get (заявка 2026-10-13, п. 5.3): сотрудники по ID, включая уволенных и отключённых — user.get без фильтра ACTIVE.
+ * Нужен, когда в записях CRM, звонках, задачах есть ID ответственного, а employee_search его не находит (ищет только работающих).
+ */
+export const employeesGetTool = defineTool({
+  name: 'employees_get',
+  module: 'company',
+  title: 'Сотрудники по ID',
+  description:
+    'ФИО, должность и активность сотрудников по списку ID (до 200), включая уволенных и отключённых (user.get). ' +
+    'Использовать, когда есть ID ответственного (ASSIGNED_BY_ID, userId, RESPONSIBLE_ID) и нужно имя, а employee_search не находит человека, потому что он уволен. ' +
+    'Только минимальные поля — без телефонов и email.',
+  operation: 'read',
+  annotations: READ_ANNOTATIONS,
+  requiresBitrix: true,
+  inputSchema: z
+    .object({
+      ids: z.array(idSchema).min(1).max(200).describe('ID сотрудников'),
+    })
+    .strict(),
+  outputDataSchema: z.object({
+    items: z.array(
+      z.object({
+        id: z.number(),
+        fullName: z.string(),
+        position: z.string(),
+        active: z.boolean(),
+        userType: z.string(),
+      }),
+    ),
+    notFound: z.array(z.number()),
+  }),
+  handler: async (args, ctx) => {
+    const ids = [...new Set(args.ids)];
+    const found = new Map<number, Employee>();
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      const r = await ctx.bitrix.call(
+        'legacy',
+        'user.get',
+        { FILTER: { ID: chunk }, select: [...EMPLOYEE_SELECT] },
+        { requestId: ctx.requestId, signal: ctx.signal },
+      );
+      if (!Array.isArray(r.result)) throw upstreamShapeError('user.get', 'legacy');
+      for (const e of r.result.map(normalizeEmployee)) if (e && chunk.includes(e.id)) found.set(e.id, e);
+    }
+    const items = ids.flatMap((id) => {
+      const e = found.get(id);
+      return e
+        ? [{ id, fullName: e.fullName, position: e.position, active: e.active, userType: e.userType }]
+        : [];
+    });
+    const notFound = ids.filter((id) => !found.has(id));
+    return ok(
+      { items, notFound },
+      {
+        requestId: ctx.requestId,
+        durationMs: Date.now() - ctx.startedAt,
+        method: 'user.get',
+        apiVersion: 'legacy',
+        completeness: 'complete',
+        warnings: notFound.length
+          ? ['Часть ID не найдена: пользователь удалён или скрыт правами вебхука']
+          : [],
+      },
     );
   },
 });

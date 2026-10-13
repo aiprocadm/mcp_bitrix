@@ -45,7 +45,8 @@ export async function offsetPage(
   let upstreamCalls = 0;
   const page = await statefulPage<OffsetState>(ctx, {
     tool: opts.tool,
-    bindingParts: { ...opts.bindingParts, pageSize: opts.pageSize },
+    // Размер страницы в привязку не входит: состояние {start, skip} от него не зависит.
+    bindingParts: opts.bindingParts,
     cursor: opts.cursor,
     initial: { start: 0, skip: 0 },
     fetch: async (state) => {

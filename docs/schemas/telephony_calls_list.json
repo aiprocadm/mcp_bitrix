@@ -1,7 +1,7 @@
 {
   "name": "telephony_calls_list",
   "title": "История звонков",
-  "description": "История звонков портала за период (voximplant.statistic.get): время, направление, длительность, результат, сотрудник, привязка к CRM. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Только метаданные: ссылок на записи разговоров и логи нет (hasRecording лишь сообщает, что запись существует); текст разговора — crm_call_transcript по crmActivityId (если ИИ Битрикс24 сделал расшифровку); номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.",
+  "description": "История звонков портала за период (voximplant.statistic.get): время, направление, длительность, состоялся ли разговор, сотрудник (ФИО), привязка к CRM, recordFileId — ID файла записи на Диске. Использовать для вопросов «кто кому звонил», «сколько пропущенных», «звонки сотрудника за неделю». Фильтры сервера: direction, status (answered/missed), minDurationSec, lineNumber, crmBound, phoneLast4. mode=summary — вместо списка сводка по сотрудникам и линиям (всего, входящие, исходящие, отвечено, пропущено, минуты разговора) одним вызовом. Ссылок на записи нет: запись скачать — disk_file_download по recordFileId или calls_recordings_download за период; текст — call_transcribe. Номер абонента маскируется; includePhoneNumbers=true — только для роли administrator или по профилю выдачи. Полнота внешней АТС не гарантируется.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -28,6 +28,62 @@
         "exclusiveMinimum": 0,
         "maximum": 9007199254740991
       },
+      "direction": {
+        "description": "incoming — входящие (в т. ч. переадресованные и обратные), outgoing — исходящие",
+        "type": "string",
+        "enum": [
+          "incoming",
+          "outgoing"
+        ]
+      },
+      "status": {
+        "description": "answered — разговор состоялся (код 200), missed — не состоялся (для входящих — пропущен)",
+        "type": "string",
+        "enum": [
+          "answered",
+          "missed"
+        ]
+      },
+      "minDurationSec": {
+        "description": "Длительность от N секунд",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 86400
+      },
+      "lineNumber": {
+        "description": "Линия (номер портала, PORTAL_NUMBER)",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "crmBound": {
+        "description": "true — только привязанные к CRM, false — только без привязки",
+        "type": "boolean"
+      },
+      "phoneLast4": {
+        "description": "Последние 4 цифры номера абонента (номер в ответе остаётся скрытым)",
+        "type": "string",
+        "pattern": "^\\d{4}$"
+      },
+      "mode": {
+        "default": "list",
+        "description": "list — страница звонков; summary — сводка по сотрудникам и линиям за весь период",
+        "type": "string",
+        "enum": [
+          "list",
+          "summary"
+        ]
+      },
+      "withRecordFiles": {
+        "default": true,
+        "description": "Найти ID файла записи в деле CRM, если его нет в статистике (внешние АТС)",
+        "type": "boolean"
+      },
+      "compact": {
+        "default": true,
+        "description": "Короткий ответ: без callId, категории, текста причины и пустых полей",
+        "type": "boolean"
+      },
       "includePhoneNumbers": {
         "default": false,
         "description": "Показать номер абонента полностью (персональные данные; по умолчанию маска ***1234)",
@@ -49,6 +105,9 @@
     "required": [
       "from",
       "to",
+      "mode",
+      "withRecordFiles",
+      "compact",
       "includePhoneNumbers"
     ],
     "additionalProperties": false
@@ -86,6 +145,12 @@
                         "null"
                       ]
                     },
+                    "userName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "type": {
                       "type": "string"
                     },
@@ -103,6 +168,9 @@
                     },
                     "durationSec": {
                       "type": "number"
+                    },
+                    "answered": {
+                      "type": "boolean"
                     },
                     "resultCode": {
                       "type": [
@@ -162,22 +230,19 @@
                     },
                     "hasRecording": {
                       "type": "boolean"
+                    },
+                    "recordFileId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
                     "id",
-                    "callId",
-                    "userId",
                     "type",
-                    "category",
-                    "startDate",
                     "durationSec",
-                    "resultCode",
-                    "resultReason",
-                    "phoneNumber",
-                    "lineNumber",
-                    "crm",
-                    "crmActivityId",
+                    "answered",
                     "hasRecording"
                   ],
                   "additionalProperties": false
@@ -191,13 +256,162 @@
                   "number",
                   "null"
                 ]
+              },
+              "summary": {
+                "type": "object",
+                "properties": {
+                  "all": {
+                    "type": "object",
+                    "properties": {
+                      "total": {
+                        "type": "number"
+                      },
+                      "incoming": {
+                        "type": "number"
+                      },
+                      "outgoing": {
+                        "type": "number"
+                      },
+                      "answered": {
+                        "type": "number"
+                      },
+                      "missed": {
+                        "type": "number"
+                      },
+                      "talkMinutes": {
+                        "type": "number"
+                      },
+                      "avgTalkSec": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "total",
+                      "incoming",
+                      "outgoing",
+                      "answered",
+                      "missed",
+                      "talkMinutes",
+                      "avgTalkSec"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "byUser": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "number"
+                        },
+                        "incoming": {
+                          "type": "number"
+                        },
+                        "outgoing": {
+                          "type": "number"
+                        },
+                        "answered": {
+                          "type": "number"
+                        },
+                        "missed": {
+                          "type": "number"
+                        },
+                        "talkMinutes": {
+                          "type": "number"
+                        },
+                        "avgTalkSec": {
+                          "type": "number"
+                        },
+                        "userId": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "userName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "incoming",
+                        "outgoing",
+                        "answered",
+                        "missed",
+                        "talkMinutes",
+                        "avgTalkSec",
+                        "userId",
+                        "userName"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "byLine": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "number"
+                        },
+                        "incoming": {
+                          "type": "number"
+                        },
+                        "outgoing": {
+                          "type": "number"
+                        },
+                        "answered": {
+                          "type": "number"
+                        },
+                        "missed": {
+                          "type": "number"
+                        },
+                        "talkMinutes": {
+                          "type": "number"
+                        },
+                        "avgTalkSec": {
+                          "type": "number"
+                        },
+                        "lineNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "incoming",
+                        "outgoing",
+                        "answered",
+                        "missed",
+                        "talkMinutes",
+                        "avgTalkSec",
+                        "lineNumber"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "scannedCalls": {
+                    "type": "number"
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "all",
+                  "byUser",
+                  "byLine",
+                  "scannedCalls",
+                  "complete"
+                ],
+                "additionalProperties": false
               }
             },
-            "required": [
-              "items",
-              "returnedCount",
-              "total"
-            ],
             "additionalProperties": false
           },
           "meta": {

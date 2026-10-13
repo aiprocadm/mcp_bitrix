@@ -1,7 +1,7 @@
 {
   "name": "openlines_chat_history",
   "title": "Переписка в открытой линии",
-  "description": "Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений.",
+  "description": "Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений. from/to — сообщения за период, textOnly=true — без системных строк. Весь список диалогов за период — openlines_dialogs_list, переписка в файл — openlines_chat_export.",
   "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -30,10 +30,26 @@
         "type": "integer",
         "minimum": 1,
         "maximum": 500
+      },
+      "from": {
+        "description": "Только сообщения с этой даты (ISO 8601)",
+        "type": "string",
+        "maxLength": 40
+      },
+      "to": {
+        "description": "Только сообщения до этой даты",
+        "type": "string",
+        "maxLength": 40
+      },
+      "textOnly": {
+        "default": false,
+        "description": "Только сообщения клиента и оператора, без системных строк («оператор начал работу», «диалог завершён»)",
+        "type": "boolean"
       }
     },
     "required": [
-      "maxMessages"
+      "maxMessages",
+      "textOnly"
     ],
     "additionalProperties": false
   },

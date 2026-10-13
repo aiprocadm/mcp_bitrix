@@ -22,6 +22,7 @@ import {
 } from '../shared.js';
 import { defineTool, READ_ANNOTATIONS } from '../types.js';
 import { classicEntity, entityTypeSchema } from './entities.js';
+import { NameResolver } from './names.js';
 import { ACTIVITY_TYPE_IDS, withPlainDescription } from './related-read.js';
 
 const ENTITY_NAMES: Record<number, string> = {
@@ -129,6 +130,10 @@ export const crmActivitiesSearchTool = defineTool({
         .describe('Только дела, привязанные к этой записи (фильтр BINDINGS)'),
       includeDescription: z.boolean().default(false),
       descriptionMaxChars: z.number().int().min(200).max(20_000).default(2000),
+      withNames: z
+        .boolean()
+        .default(true)
+        .describe('Добавить responsibleName — ФИО ответственного (в т. ч. уволенного)'),
       ...pageArgsShape,
     })
     .strict(),
@@ -165,7 +170,7 @@ export const crmActivitiesSearchTool = defineTool({
       pageSize: pageSizeOf(ctx, args.pageSize),
       cursor: args.cursor,
     });
-    const items = page.items
+    let items: Record<string, unknown>[] = page.items
       .filter(isObj)
       .map((it) =>
         compactActivity(
@@ -175,6 +180,17 @@ export const crmActivitiesSearchTool = defineTool({
         ),
       );
     const warnings: string[] = [];
+    if (args.withNames) {
+      const names = new NameResolver(ctx);
+      await names.loadUsers(
+        items.map((i) => i['responsibleId']).filter((u): u is number => typeof u === 'number'),
+      );
+      items = items.map((i) => ({
+        ...i,
+        responsibleName: names.userName(typeof i['responsibleId'] === 'number' ? i['responsibleId'] : null),
+      }));
+      warnings.push(...names.warnings);
+    }
     if (!args.from && !args.to && !args.boundTo)
       warnings.push('Без периода и boundTo поиск идёт по всем делам портала — сузьте выборку');
     return ok(

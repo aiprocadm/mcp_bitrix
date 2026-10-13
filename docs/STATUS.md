@@ -33,6 +33,19 @@
 | 13  | Полная версия              | ✅ 25.09 | срезы 10–11 (классический CRM, связанные данные) + срез 12: все модули §9.2–9.14 — `docs/modules/*.md`                                                                                                                                                                           |
 | 14  | Destructive-функции        | ✅ 25.09 | 6 delete-инструментов (`crm_delete_record`, `task_delete`, `task_checklist_delete`, `calendar_delete_event`, `company_department_delete`, `disk_delete_file`): impact в плане, CONFLICT, verify по отсутствию; скрыты без `ENABLE_DESTRUCTIVE_TOOLS`, только administrator       |
 
+## Что именно сделано (2026-10-13 — больше данных за меньше токенов)
+
+- Сервер сам перебирает выборку и отдаёт итог: `crm_export` (вся выборка в XLSX/CSV в `DOWNLOAD_DIR` с ФИО, названиями
+  стадий и ссылками на карточки), `crm_count` (итоги по группам и датам), `crm_orphans` (компании/контакты без сделок,
+  лидов или дел за N дней). Долгая работа продолжается по `cursor`.
+- Звонки: в `telephony_calls_list` — `recordFileId`, ФИО сотрудника, фильтры (направление, результат, длительность,
+  линия, CRM, 4 цифры номера), `mode=summary`; `calls_recordings_download`; `call_transcribe` (faster-whisper на
+  сервере, `TRANSCRIBE_PYTHON`, по умолчанию выключено). Открытые линии: `openlines_dialogs_list`,
+  `openlines_chat_export`, в истории `from`/`to`/`textOnly`.
+- Мелочи: `!%ПОЛЕ` проверяется сервером (портал отдавал совпадения), `compact`/`withNames` в `crm_list_records`,
+  `pageSize` можно менять при продолжении по курсору, `employees_get` (по ID, включая уволенных).
+- Подробности и что не проверено на живом портале — `docs/modules/bulk-calls-dialogs.md`. 139 инструментов.
+
 ## Что именно сделано (2026-10-08 — скачивание файлов)
 
 - `disk_file_download` (один файл Диска/вложения любого формата) и `chat_files_download` (все файлы диалога с описью

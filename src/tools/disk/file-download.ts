@@ -33,10 +33,10 @@ const folderSchema = z
   .max(200)
   .describe('Подпапка внутри DOWNLOAD_DIR: до 3 частей через «/», например «переписка/Иванов»');
 
-type Status = 'saved' | 'exists' | 'too_large' | 'failed';
+export type Status = 'saved' | 'exists' | 'too_large' | 'failed';
 
 /** Скачивает файл Диска в dir под именем target; ошибки портала по одному файлу не прерывают пакет. */
-async function downloadOne(
+export async function downloadOne(
   ctx: ToolContext,
   fileId: number,
   dir: string,
@@ -68,7 +68,7 @@ async function downloadOne(
 }
 
 /** Ошибка одного файла → строка для ответа; отмена вызова и сбой диска сервера прерывают весь пакет. */
-function perFileError(e: unknown, ctx: ToolContext): { status: Status; error: string } {
+export function perFileError(e: unknown, ctx: ToolContext): { status: Status; error: string } {
   if (ctx.signal?.aborted) throw e;
   if (AppError.is(e)) {
     if (e.code === 'FILE_TOO_LARGE') return { status: 'too_large', error: e.code };

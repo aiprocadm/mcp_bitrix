@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { JsonValue } from '../../bitrix/legacy-adapter.js';
 import { AppError } from '../../errors/app-error.js';
 import { ok } from '../../mcp/result.js';
-import { asText, idOf, idSchema, isObj, num, upstreamShapeError, yn } from '../shared.js';
+import { asText, idOf, idSchema, isObj, isoDateSchema, num, upstreamShapeError, yn } from '../shared.js';
 import { defineTool, READ_ANNOTATIONS, type ToolContext } from '../types.js';
 import { classicEntity, entityTypeSchema, recordTitle } from '../crm/entities.js';
 import { getRecord } from '../crm/crm-service.js';
@@ -143,6 +143,110 @@ export function crmBindings(entityData2: string): Record<string, number> {
 
 const authorKind = z.enum(['client', 'operator', 'system']);
 
+export interface HistoryMessage {
+  id: number;
+  date: string;
+  authorKind: z.infer<typeof authorKind>;
+  authorId: number;
+  authorName: string;
+  text: string;
+  files: { name: string; type: string; size: number | null }[];
+}
+
+export interface History {
+  chatId: number;
+  sessionId: number | null;
+  chatName: string;
+  connectorId: string;
+  /** ID линии из entityId чата («коннектор|линия|…»). */
+  lineId: number | null;
+  crm: Record<string, number>;
+  messages: HistoryMessage[];
+}
+
+/** Переписка сессии (imopenlines.session.history.get) в разобранном виде, сообщения по возрастанию даты. */
+export async function loadHistory(
+  ctx: ToolContext,
+  ids: { chatId?: number | undefined; sessionId?: number | undefined },
+): Promise<History> {
+  const params: Record<string, number> = {};
+  if (ids.sessionId !== undefined) params['SESSION_ID'] = ids.sessionId;
+  if (ids.chatId !== undefined) params['CHAT_ID'] = ids.chatId;
+  const r = await ctx.bitrix.call('legacy', 'imopenlines.session.history.get', params, {
+    requestId: ctx.requestId,
+    signal: ctx.signal,
+  });
+  if (!isObj(r.result)) throw upstreamShapeError('imopenlines.session.history.get', 'legacy');
+  const res = r.result;
+  const chatId = idOf(res['chatId']) ?? ids.chatId;
+  if (chatId === undefined) {
+    throw new AppError('NOT_FOUND', 'Сессия открытой линии не найдена или недоступна', {
+      method: 'imopenlines.session.history.get',
+      apiVersion: 'legacy',
+    });
+  }
+  const users = isObj(res['users']) ? res['users'] : {};
+  const files = isObj(res['files']) ? res['files'] : {};
+  const chats = isObj(res['chat']) ? res['chat'] : {};
+  const chat = isObj(chats[String(chatId)]) ? (chats[String(chatId)] as Record<string, JsonValue>) : {};
+  const rawMessages = isObj(res['message']) ? Object.values(res['message']) : [];
+
+  const messages: HistoryMessage[] = rawMessages
+    .filter(isObj)
+    .flatMap((m) => {
+      const id = idOf(m['id']);
+      if (id === undefined) return [];
+      const authorId = num(m['senderid']) ?? 0;
+      const user = isObj(users[String(authorId)])
+        ? (users[String(authorId)] as Record<string, JsonValue>)
+        : {};
+      const kind: z.infer<typeof authorKind> =
+        authorId === 0
+          ? 'system'
+          : user['connector'] === true || yn(user['connector'])
+            ? 'client'
+            : 'operator';
+      const params = isObj(m['params']) ? m['params'] : {};
+      const fileIds = [params['FILE_ID'], params['fileId']].flatMap((v) => (Array.isArray(v) ? v : []));
+      return [
+        {
+          id,
+          date: asText(m['date']),
+          authorKind: kind,
+          authorId,
+          authorName: kind === 'system' ? 'Система' : asText(user['name']),
+          text: bbToText(asText(m['text'])),
+          files: fileIds.flatMap((fid) => {
+            const f = files[asText(fid)];
+            return isObj(f)
+              ? [{ name: asText(f['name']), type: asText(f['type']), size: num(f['size']) ?? null }]
+              : [];
+          }),
+        },
+      ];
+    })
+    .sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1));
+  const entityParts = asText(chat['entityId']).split('|');
+  return {
+    chatId,
+    sessionId: idOf(res['sessionId']) ?? null,
+    chatName: asText(chat['name']),
+    connectorId: entityParts[0] ?? '',
+    lineId: idOf(entityParts[1]) ?? null,
+    crm: crmBindings(asText(chat['entityData2'])),
+    messages,
+  };
+}
+
+/** Дата сообщения попадает в период (строки ISO с зоной сравниваются как моменты времени). */
+export function inPeriod(date: string, from: string | undefined, to: string | undefined): boolean {
+  const t = Date.parse(date);
+  if (Number.isNaN(t)) return from === undefined && to === undefined;
+  if (from !== undefined && t < Date.parse(from)) return false;
+  if (to !== undefined && t > Date.parse(to)) return false;
+  return true;
+}
+
 export const openlinesChatHistoryTool = defineTool({
   name: 'openlines_chat_history',
   module: 'openlines',
@@ -151,7 +255,8 @@ export const openlinesChatHistoryTool = defineTool({
     'Сообщения сессии открытой линии (imopenlines.session.history.get) по chatId (последняя сессия) или sessionId: ' +
     'дата, автор (client — клиент, operator — сотрудник, system — служебные), текст без разметки, имена файлов. ' +
     'Использовать, когда нужно прочитать переписку с клиентом из мессенджера или чата сайта; chatId — из openlines_crm_chats. ' +
-    'Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений.',
+    'Ссылки на файлы не отдаются. Длинная сессия — последние maxMessages сообщений. from/to — сообщения за период, textOnly=true — без системных строк. ' +
+    'Весь список диалогов за период — openlines_dialogs_list, переписка в файл — openlines_chat_export.',
   operation: 'read',
   annotations: READ_ANNOTATIONS,
   requiresBitrix: true,
@@ -168,6 +273,14 @@ export const openlinesChatHistoryTool = defineTool({
         .max(500)
         .default(100)
         .describe('Сколько последних сообщений отдать'),
+      from: isoDateSchema.optional().describe('Только сообщения с этой даты (ISO 8601)'),
+      to: isoDateSchema.optional().describe('Только сообщения до этой даты'),
+      textOnly: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Только сообщения клиента и оператора, без системных строк («оператор начал работу», «диалог завершён»)',
+        ),
     })
     .strict()
     .refine((a) => a.chatId !== undefined || a.sessionId !== undefined, {
@@ -195,63 +308,10 @@ export const openlinesChatHistoryTool = defineTool({
     totalInSession: z.number(),
   }),
   handler: async (args, ctx) => {
-    const params: Record<string, number> = {};
-    if (args.sessionId !== undefined) params['SESSION_ID'] = args.sessionId;
-    if (args.chatId !== undefined) params['CHAT_ID'] = args.chatId;
-    const r = await ctx.bitrix.call('legacy', 'imopenlines.session.history.get', params, {
-      requestId: ctx.requestId,
-      signal: ctx.signal,
-    });
-    if (!isObj(r.result)) throw upstreamShapeError('imopenlines.session.history.get', 'legacy');
-    const res = r.result;
-    const chatId = idOf(res['chatId']) ?? args.chatId;
-    if (chatId === undefined) {
-      throw new AppError('NOT_FOUND', 'Сессия открытой линии не найдена или недоступна', {
-        method: 'imopenlines.session.history.get',
-        apiVersion: 'legacy',
-      });
-    }
-    const users = isObj(res['users']) ? res['users'] : {};
-    const files = isObj(res['files']) ? res['files'] : {};
-    const chats = isObj(res['chat']) ? res['chat'] : {};
-    const chat = isObj(chats[String(chatId)]) ? (chats[String(chatId)] as Record<string, JsonValue>) : {};
-    const rawMessages = isObj(res['message']) ? Object.values(res['message']) : [];
-
-    const messages = rawMessages
-      .filter(isObj)
-      .flatMap((m) => {
-        const id = idOf(m['id']);
-        if (id === undefined) return [];
-        const authorId = num(m['senderid']) ?? 0;
-        const user = isObj(users[String(authorId)])
-          ? (users[String(authorId)] as Record<string, JsonValue>)
-          : {};
-        const kind: z.infer<typeof authorKind> =
-          authorId === 0
-            ? 'system'
-            : user['connector'] === true || yn(user['connector'])
-              ? 'client'
-              : 'operator';
-        const params = isObj(m['params']) ? m['params'] : {};
-        const fileIds = [params['FILE_ID'], params['fileId']].flatMap((v) => (Array.isArray(v) ? v : []));
-        return [
-          {
-            id,
-            date: asText(m['date']),
-            authorKind: kind,
-            authorId,
-            authorName: kind === 'system' ? 'Система' : asText(user['name']),
-            text: bbToText(asText(m['text'])),
-            files: fileIds.flatMap((fid) => {
-              const f = files[asText(fid)];
-              return isObj(f)
-                ? [{ name: asText(f['name']), type: asText(f['type']), size: num(f['size']) ?? null }]
-                : [];
-            }),
-          },
-        ];
-      })
-      .sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1));
+    const h = await loadHistory(ctx, args);
+    const messages = h.messages.filter(
+      (m) => (!args.textOnly || m.authorKind !== 'system') && inPeriod(m.date, args.from, args.to),
+    );
     const shown = messages.slice(-args.maxMessages);
     const warnings: string[] = [];
     if (shown.length < messages.length)
@@ -262,14 +322,14 @@ export const openlinesChatHistoryTool = defineTool({
       warnings.push('Без sessionId портал отдаёт последнюю сессию чата; ранние сессии — по их sessionId');
     return ok(
       {
-        chatId,
-        sessionId: idOf(res['sessionId']) ?? null,
-        chatName: asText(chat['name']),
-        connectorId: asText(chat['entityId']).split('|')[0] ?? '',
-        crm: crmBindings(asText(chat['entityData2'])),
+        chatId: h.chatId,
+        sessionId: h.sessionId,
+        chatName: h.chatName,
+        connectorId: h.connectorId,
+        crm: h.crm,
         messages: shown,
         returnedCount: shown.length,
-        totalInSession: messages.length,
+        totalInSession: h.messages.length,
       },
       meta(ctx, 'imopenlines.session.history.get', warnings, shown.length < messages.length),
     );

@@ -48,7 +48,7 @@ describe('MCP через InMemoryTransport (T41)', () => {
       .filter((d) => !isWriteOperation(d.operation))
       .map((d) => d.name)
       .sort();
-    expect(expected).toHaveLength(77);
+    expect(expected).toHaveLength(85);
     expect(names).toEqual(expected);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);
