@@ -50,6 +50,7 @@
 | `crm_requisite_create` | crm | create | false | false | false | да | [json](schemas/crm_requisite_create.json) |
 | `crm_requisite_update` | crm | update | false | false | true | да | [json](schemas/crm_requisite_update.json) |
 | `crm_requisites_list` | crm | read | true | false | true | да | [json](schemas/crm_requisites_list.json) |
+| `crm_find_by_requisite` | crm | read | true | false | true | да | [json](schemas/crm_find_by_requisite.json) |
 | `crm_requisite_presets_list` | crm | read | true | false | true | да | [json](schemas/crm_requisite_presets_list.json) |
 | `crm_requisite_address_set` | crm | update | false | false | true | да | [json](schemas/crm_requisite_address_set.json) |
 | `crm_bank_account_add` | crm | create | false | false | false | да | [json](schemas/crm_bank_account_add.json) |
@@ -320,6 +321,10 @@ entityType=deal — количество и суммы сделок по КАЖ�
 ### `crm_requisites_list`
 
 Реквизиты компании или контакта CRM (crm.requisite.list): название, шаблон, ИНН/КПП/ОГРН, руководитель; по желанию — адреса реквизитов. Использовать, когда нужны реквизиты клиента для документа/счёта или ID реквизита для изменения, адреса и банковских реквизитов. Паспортные данные и персональные номера не выдаются. Одна страница до 50 реквизитов, продолжение — по cursor.
+
+### `crm_find_by_requisite`
+
+Точный поиск по ИНН через crm.requisite.list. Использовать, когда известен ИНН клиента: возвращает ID реквизита и владельца без поиска по названию. Несколько совпадений остаются отдельными; владельцы: компания (4, по умолчанию) или контакт (3). Продолжение по cursor, паспортные поля не выдаются.
 
 ### `crm_requisite_presets_list`
 

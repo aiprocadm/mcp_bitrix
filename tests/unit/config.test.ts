@@ -26,8 +26,10 @@ describe('config (ТЗ §13, T01, T02)', () => {
     const c = testConfig();
     expect(c.bitrix.portalOrigin).toBe('https://mock.bitrix24.invalid');
     expect(c.bitrix.webhook?.userId).toBe(7);
-    expect(c.policy.methodPolicyFile.endsWith('/policies/methods.example.json')).toBe(true);
-    expect(c.storage.databasePath.includes('/data/test/mcp.sqlite')).toBe(true);
+    expect(c.policy.methodPolicyFile.replaceAll('\\', '/').endsWith('/policies/methods.example.json')).toBe(
+      true,
+    );
+    expect(c.storage.databasePath.replaceAll('\\', '/').includes('/data/test/mcp.sqlite')).toBe(true);
     expect(c.policy.enabledModules.has('system')).toBe(true);
   });
 

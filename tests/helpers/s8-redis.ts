@@ -6,8 +6,11 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
 
 function findRedis(): string | undefined {
-  const r = spawnSync('sh', ['-c', 'command -v redis-server'], { encoding: 'utf8' });
-  const p = r.stdout.trim();
+  const r =
+    process.platform === 'win32'
+      ? spawnSync('where.exe', ['redis-server'], { encoding: 'utf8' })
+      : spawnSync('sh', ['-c', 'command -v redis-server'], { encoding: 'utf8' });
+  const p = (r.stdout ?? '').trim().split(/\r?\n/)[0];
   return r.status === 0 && p ? p : undefined;
 }
 

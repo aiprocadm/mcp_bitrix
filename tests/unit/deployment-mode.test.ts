@@ -59,7 +59,7 @@ describe('DEPLOYMENT_MODE', () => {
     expect(c.deployment.mode).toBe('saas');
     expect(c.deployment.publicBaseUrl).toBe('https://mcp.example.ru');
     expect(c.deployment.processRole).toBe('web');
-    expect(c.deployment.files.kek?.endsWith('/secrets/kek.key')).toBe(true);
+    expect(c.deployment.files.kek?.replaceAll('\\', '/').endsWith('/secrets/kek.key')).toBe(true);
     expect(c.deployment.b24App.clientId).toBe('local.test.app');
     const printed = JSON.stringify(describeConfig(c));
     expect(printed).not.toContain('pg-Pa55word-xyz');

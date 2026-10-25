@@ -10,7 +10,8 @@ import { MOCK_ENV } from '../helpers/app.js';
 
 const DEPLOY = path.resolve(MOCK_ENV, '..', '..', '..', 'deploy', 'saas');
 const read = (f: string) => readFileSync(path.join(DEPLOY, f), 'utf8');
-const PYYAML = spawnSync('python3', ['-c', 'import yaml']).status === 0;
+const PYTHON = process.env['DAVE_TEST_PYTHON'] ?? (process.platform === 'win32' ? undefined : 'python3');
+const PYYAML = PYTHON !== undefined && spawnSync(PYTHON, ['-c', 'import yaml']).status === 0;
 
 interface Service {
   image?: string;
@@ -29,7 +30,7 @@ interface Compose {
 
 function loadCompose(): Compose {
   const r = spawnSync(
-    'python3',
+    PYTHON!,
     [
       '-c',
       'import sys,yaml,json; json.dump(yaml.safe_load(open(sys.argv[1])), sys.stdout)',
@@ -80,7 +81,7 @@ describe('deploy/saas', () => {
 
   it.skipIf(!PYYAML)('правила алертов: YAML корректен, метрики — из реестра сервиса', () => {
     const r = spawnSync(
-      'python3',
+      PYTHON!,
       [
         '-c',
         'import sys,yaml,json; json.dump(yaml.safe_load(open(sys.argv[1])), sys.stdout)',

@@ -295,6 +295,9 @@ describe('call_transcribe', () => {
 
     const again = await call('call_transcribe', { file: env.data?.['file'] });
     expect(again.data).toMatchObject({ cached: true, text: env.data?.['text'] });
+    const windowsPath = String(env.data?.['file']).replaceAll('/', '\\');
+    const legacy = await call('call_transcribe', { file: windowsPath });
+    expect(legacy.data).toMatchObject({ cached: true, text: env.data?.['text'] });
   });
 
   it('file вне папки скачиваний — отказ; ровно один источник', async () => {
