@@ -89,7 +89,7 @@ describe('конфигурация saas (сборка)', () => {
     expect([...(c.deployment.ops?.enabledTasks ?? [])]).toEqual(['usage.flush', 'billing.renewals']);
     expect(c.deployment.ops?.taskIntervals.get('usage.flush')).toBe(30_000);
     expect(c.deployment.http.trustedProxies).toEqual(['172.16.0.0/12', '10.0.0.5']);
-    expect(c.deployment.http.metricsTokenFile?.endsWith('/secrets/metrics')).toBe(true);
+    expect(c.deployment.http.metricsTokenFile?.replaceAll('\\', '/').endsWith('/secrets/metrics')).toBe(true);
     expect(testConfig().deployment.ops).toBeUndefined();
   });
 

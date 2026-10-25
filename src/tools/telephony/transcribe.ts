@@ -134,7 +134,7 @@ function runScript(ctx: ToolContext, audio: string, hotwords: string): Promise<T
 
 /** Путь файла внутри DOWNLOAD_DIR из «папка/имя»; выход за корень → отказ. */
 async function fileInRoot(root: string, rel: string): Promise<string> {
-  const parts = rel.split('/');
+  const parts = rel.replaceAll('\\', '/').split('/');
   const name = parts.pop() ?? '';
   if (!name || safeFileName(name, '') !== name)
     throw new AppError('VALIDATION_ERROR', 'file: имя файла с недопустимыми символами', { field: 'file' });
@@ -259,7 +259,10 @@ export const callTranscribeTool = defineTool({
       warnings.push('Для комментария в CRM текст длиннее 10000 символов — сохраните сокращённую версию');
     return ok(
       {
-        file: path.relative(await realpath(root), audio),
+        file: path
+          .relative(await realpath(root), audio)
+          .split(path.sep)
+          .join('/'),
         durationSec: transcript.duration,
         speakers: transcript.channels === 2 ? 2 : 1,
         text: truncated ? text.slice(0, args.maxChars) : text,

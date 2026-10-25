@@ -91,11 +91,13 @@ describe('staging файлов', () => {
     await expect(staging.stageFromPath(path.join(root, 'outside', '.env'), 'owner')).rejects.toThrow(
       /UPLOAD_ROOT/,
     );
-    symlinkSync(path.join(root, 'outside', 'secret.txt'), path.join(inbox, 'link.txt'));
+    symlinkSync(path.join(root, 'outside'), path.join(inbox, 'link.txt'), 'junction');
     await expect(staging.stageFromPath(path.join(inbox, 'link.txt'), 'owner')).rejects.toThrow(
       /UPLOAD_ROOT|ссылки/,
     );
-    symlinkSync(path.join(inbox, 'mcp-test.txt'), path.join(inbox, 'inner-link.txt'));
+    const innerTarget = path.join(inbox, 'inner-target');
+    mkdirSync(innerTarget);
+    symlinkSync(innerTarget, path.join(inbox, 'inner-link.txt'), 'junction');
     await expect(staging.stageFromPath(path.join(inbox, 'inner-link.txt'), 'owner')).rejects.toThrow(
       /ссылки/,
     );

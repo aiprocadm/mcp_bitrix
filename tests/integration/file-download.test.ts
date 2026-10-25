@@ -144,7 +144,7 @@ describe('disk_file_download', () => {
 
   it('больше MAX_DOWNLOAD_BYTES → FILE_TOO_LARGE до скачивания; папка «..» и ссылка наружу — отказ', async () => {
     const outside = mkdtempSync(path.join(tmpdir(), 'mcp-out-'));
-    symlinkSync(outside, path.join(root, 'наружу'));
+    symlinkSync(outside, path.join(root, 'наружу'), 'junction');
     await start({ DOWNLOAD_DIR: root, MAX_DOWNLOAD_BYTES: '1000' });
     expect((await call('disk_file_download', { fileId: 804 })).error?.code).toBe('FILE_TOO_LARGE');
     for (const folder of ['../x', 'a/../../x', '/etc', '.hidden', 'a/b/c/d', 'наружу']) {
