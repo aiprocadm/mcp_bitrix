@@ -200,3 +200,64 @@ export async function paginateLegacy(opts: {
     : null;
   return { items: pageItems, nextCursor, hasMore, upstreamTotal, upstreamCalls: calls };
 }
+
+/**
+ * Ключевая пагинация legacy-списков по ID (официальная рекомендация Битрикс24 для больших
+ * выборок: фильтр `>ID`/`<ID`, `order: {ID}`, `start=-1` — без COUNT и без смещения).
+ * Первая upstream-страница запрашивается как обычно (`after = null`, `start=0`), чтобы ответ
+ * сохранил общее число записей; продолжение — по ID последней прочитанной строки. Глубокие
+ * страницы не дорожают с номером, а записи, добавленные или удалённые во время листания,
+ * не сдвигают выдачу (смещение `start` давало дубли и пропуски).
+ */
+export interface KeysetPageState {
+  mode: 'keyset';
+  /** ID последней прочитанной upstream-строки; null — ещё ничего не прочитано. */
+  after: number | null;
+  /** Upstream больше не отдаёт строк. */
+  done: boolean;
+  buffer: JsonValue[];
+}
+
+export interface KeysetUpstreamPage {
+  /** Строки после локальных фильтров. */
+  items: JsonValue[];
+  /** ID последней сырой строки upstream-страницы (до локальных фильтров). */
+  lastId: number | undefined;
+  /** Upstream-страница была полной — за ней могут быть ещё строки. */
+  full: boolean;
+  total: number | undefined;
+}
+
+export async function paginateKeyset(opts: {
+  store: CursorStore;
+  binding: CursorBinding;
+  cursor: string | undefined;
+  pageSize: number;
+  maxUpstreamCalls?: number;
+  fetchPage: (after: number | null) => Promise<KeysetUpstreamPage>;
+}): Promise<PageResult> {
+  const maxCalls = opts.maxUpstreamCalls ?? 2;
+  let state: KeysetPageState = opts.cursor
+    ? await opts.store.peek<KeysetPageState>(opts.cursor, opts.binding)
+    : { mode: 'keyset', after: null, done: false, buffer: [] };
+  let items: JsonValue[] = [...state.buffer];
+  let upstreamTotal: number | undefined;
+  let calls = 0;
+  while (items.length < opts.pageSize && !state.done && calls < maxCalls) {
+    const page = await opts.fetchPage(state.after);
+    calls += 1;
+    items = items.concat(page.items);
+    if (page.total !== undefined) upstreamTotal = page.total;
+    // Без ID последней строки продолжать нельзя: иначе цикл запросил бы ту же страницу снова.
+    const done = !page.full || page.lastId === undefined;
+    state = { mode: 'keyset', after: page.lastId ?? state.after, done, buffer: [] };
+  }
+  if (opts.cursor) await opts.store.discard(opts.cursor);
+  const pageItems = items.slice(0, opts.pageSize);
+  const remainder = items.slice(opts.pageSize);
+  const hasMore = remainder.length > 0 || !state.done;
+  const nextCursor = hasMore
+    ? await opts.store.create(opts.binding, { ...state, buffer: remainder } satisfies KeysetPageState)
+    : null;
+  return { items: pageItems, nextCursor, hasMore, upstreamTotal, upstreamCalls: calls };
+}

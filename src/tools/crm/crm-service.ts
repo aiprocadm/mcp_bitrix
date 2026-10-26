@@ -5,7 +5,7 @@
  * crm.duplicate.findbycomm. Только методы из реестра; результаты нормализуются, форма проверяется.
  */
 import type { JsonObject, JsonValue } from '../../bitrix/legacy-adapter.js';
-import { bindingHash, paginateLegacy, type PageResult } from '../../bitrix/pagination.js';
+import { bindingHash, paginateKeyset, paginateLegacy, type PageResult } from '../../bitrix/pagination.js';
 import { AppError } from '../../errors/app-error.js';
 import { stateHash } from '../../security/idempotency.js';
 import type { ToolContext } from '../types.js';
@@ -49,6 +49,37 @@ export interface ListArgs {
   local?: readonly LocalCondition[];
 }
 
+/** Размер страницы legacy-списков Битрикс24. */
+const LEGACY_PAGE = 50;
+
+/**
+ * Направление ключевой пагинации или null, если она неприменима: сортировка не ровно по ID
+ * или в фильтре уже есть нечисловая граница того же вида.
+ */
+export function keysetDirection(
+  order: Record<string, 'ASC' | 'DESC'>,
+  filter: JsonObject,
+): 'ASC' | 'DESC' | null {
+  const keys = Object.keys(order);
+  if (keys.length !== 1 || keys[0] !== 'ID') return null;
+  const dir = order['ID'] === 'ASC' ? 'ASC' : 'DESC';
+  const bound = filter[dir === 'ASC' ? '>ID' : '<ID'];
+  const numeric =
+    (typeof bound === 'number' && Number.isSafeInteger(bound)) ||
+    (typeof bound === 'string' && /^\d{1,15}$/.test(bound));
+  if (bound !== undefined && !numeric) return null;
+  return dir;
+}
+
+/** Фильтр следующей страницы: граница после `after`, суженная существующим условием пользователя. */
+export function keysetFilter(filter: JsonObject, dir: 'ASC' | 'DESC', after: number): JsonObject {
+  const key = dir === 'ASC' ? '>ID' : '<ID';
+  const own = filter[key];
+  const user = own === undefined ? undefined : Number(own);
+  const value = user === undefined ? after : dir === 'ASC' ? Math.max(user, after) : Math.min(user, after);
+  return { ...filter, [key]: value };
+}
+
 export async function listRecords(
   ctx: ToolContext,
   entity: ClassicEntity,
@@ -70,6 +101,42 @@ export async function listRecords(
   const local = args.local ?? [];
   const select =
     args.select && local.length ? [...new Set([...args.select, ...local.map((c) => c.field)])] : args.select;
+  const direction = keysetDirection(args.order, args.filter);
+  if (direction) {
+    return paginateKeyset({
+      store: ctx.cursors,
+      // Курсор прежнего режима (смещение) этим режимом не читается: привязка отличается.
+      binding: { ...binding, bindingHash: bindingHash({ base: binding.bindingHash, paging: 'keyset' }) },
+      cursor: args.cursor,
+      pageSize: args.pageSize,
+      maxUpstreamCalls: local.length ? 6 : 2,
+      fetchPage: async (after) => {
+        const params: JsonObject =
+          after === null
+            ? { filter: args.filter, order: args.order, start: 0 }
+            : { filter: keysetFilter(args.filter, direction, after), order: args.order, start: -1 };
+        if (select) params['select'] = select;
+        const r = await ctx.bitrix.call('legacy', method, params, {
+          requestId: ctx.requestId,
+          signal: ctx.signal,
+        });
+        if (!Array.isArray(r.result)) throw upstream(method, `${method} вернул не массив`);
+        const raw = r.result as unknown[];
+        const ids = raw.map((x) => (x && typeof x === 'object' ? Number((x as JsonObject)['ID']) : NaN));
+        if (ids.some((id) => !Number.isSafeInteger(id)))
+          throw upstream(method, `${method}: строка без числового ID`);
+        const items = local.length
+          ? r.result.filter((x) => !!x && typeof x === 'object' && !Array.isArray(x) && passesLocal(x, local))
+          : r.result;
+        return {
+          items,
+          lastId: ids.length ? ids[ids.length - 1] : undefined,
+          full: after === null ? r.next !== undefined : raw.length >= LEGACY_PAGE,
+          total: after === null && !local.length ? r.total : undefined,
+        };
+      },
+    });
+  }
   return paginateLegacy({
     store: ctx.cursors,
     binding,
