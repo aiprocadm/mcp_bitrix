@@ -378,3 +378,21 @@ export function legacyListPage(all: unknown[], start: number, pageSize = 50): Mo
   const next = start + pageSize < all.length ? start + pageSize : undefined;
   return legacyOk(items, { total: all.length, ...(next !== undefined ? { next } : {}) });
 }
+
+/**
+ * Legacy-список, как его отдаёт Битрикс24: сортировка `order.ID`, фильтры `>ID`/`<ID`;
+ * `start >= 0` — смещение с `total` и `next`, `start = -1` — до 50 строк без подсчёта.
+ */
+export function legacyIdList(all: readonly { ID: string }[], body: Record<string, unknown>): MockResponse {
+  const filter = (body['filter'] ?? {}) as Record<string, unknown>;
+  const order = (body['order'] ?? {}) as Record<string, unknown>;
+  const desc = order['ID'] === 'DESC';
+  const gt = filter['>ID'] === undefined ? -Infinity : Number(filter['>ID']);
+  const lt = filter['<ID'] === undefined ? Infinity : Number(filter['<ID']);
+  const rows = all
+    .filter((r) => Number(r.ID) > gt && Number(r.ID) < lt)
+    .sort((a, b) => (desc ? Number(b.ID) - Number(a.ID) : Number(a.ID) - Number(b.ID)));
+  const start = Number(body['start'] ?? 0);
+  if (start === -1) return legacyOk(rows.slice(0, 50));
+  return legacyListPage(rows, start, 50);
+}
