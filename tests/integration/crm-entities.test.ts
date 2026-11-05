@@ -11,7 +11,7 @@ import {
   DEAL_FIELDS,
   dealRecord,
   legacyError,
-  legacyListPage,
+  legacyIdList,
   legacyOk,
   type RecordedCall,
 } from '../helpers/mock-bitrix.js';
@@ -76,7 +76,7 @@ function listHandler(kind: string) {
         rows = rows.filter((r) => ids.includes(String(r['ID'])));
       }
     }
-    return legacyListPage(rows, Number(c.body['start'] ?? 0), 50);
+    return legacyIdList(rows as { ID: string }[], c.body);
   };
 }
 
@@ -163,7 +163,7 @@ describe('чтение лидов, контактов, компаний', () => 
   });
 
   it('crm_list_records: свои поля по умолчанию, свои методы; фильтр по неизвестному полю сущности отклоняется', async () => {
-    const leads = await call('crm_list_records', { entityType: 'lead', pageSize: 10 });
+    const leads = await call('crm_list_records', { entityType: 'lead', pageSize: 10, compact: false });
     expect(leads.success).toBe(true);
     expect(leads.data?.['returnedCount']).toBe(3);
     expect(leads.meta['method']).toBe('crm.lead.list');
@@ -233,10 +233,10 @@ describe('crm_search_records', () => {
       title: string;
     }[];
     expect(names.map((c) => `${c.entityType}:${String(c.id)}:${c.matchedBy}`)).toEqual([
-      'contact:10:name',
       'contact:11:name',
+      'contact:10:name',
     ]);
-    expect(names[0]?.title).toBe('Контактов10 Пётр');
+    expect(names[0]?.title).toBe('Контактов11 Пётр');
     const byPhone = await call('crm_search_records', {
       entityTypes: ['contact', 'deal'],
       phone: '+7 (999) 000-00-01',

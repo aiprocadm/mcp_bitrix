@@ -5,7 +5,7 @@ import { defineTool, READ_ANNOTATIONS } from '../types.js';
 import { validateFilter, validateOrder, validateSelect } from './deal-fields.js';
 import type { JsonValue } from '../../bitrix/legacy-adapter.js';
 import { splitNotContains } from './bulk.js';
-import { getFieldsMeta, listRecords } from './crm-service.js';
+import { getFieldsMeta, listRecords, pickFields } from './crm-service.js';
 import { isEmptyValue, NameResolver, refColumnFor } from './names.js';
 import {
   entityTypeIdSchema,
@@ -26,7 +26,7 @@ export const crmListRecordsTool = defineTool({
     'Классика (crm.<entity>.list): ключи ИМЯ_ПОЛЯ с префиксом (=, %, >, <, >=, <=, !, @, ><), например {">=DATE_CREATE": "2026-09-01", "%TITLE": "договор"}. ' +
     'smart (нужен entityTypeId), invoice и quote идут через crm.item.list: поля camelCase, например {">=createdTime": "2026-09-01", "%title": "договор"}; регистр автоматически не переводится. ' +
     'Поля проверяются по схеме портала (crm_fields_get). «!%ПОЛЕ» (не содержит) проверяется сервером MCP. ' +
-    'compact=true — только ID, название, дата, ответственный и без пустых полей; withNames=true — рядом с ID сотрудника, компании, стадии их имена (поле *_NAME). ' +
+    'compact=true по умолчанию — только ID, название, дата, ответственный и без пустых полей; compact=false возвращает прежний набор, явный select имеет приоритет. withNames=true — рядом с ID сотрудника, компании, стадии их имена (поле *_NAME). ' +
     'Одна страница до 50 записей; продолжение — по cursor из ответа (pageSize при продолжении можно менять). ' +
     'Если нужна вся выборка или число — crm_export (файл) и crm_count (итоги) вместо листания.',
   operation: 'read',
@@ -55,7 +55,7 @@ export const crmListRecordsTool = defineTool({
         ),
       compact: z
         .boolean()
-        .default(false)
+        .default(true)
         .describe(
           'Короткий ответ: по умолчанию только ID, название, дата, ответственный; пустые поля и null убираются',
         ),
@@ -109,15 +109,8 @@ export const crmListRecordsTool = defineTool({
       cursor: args.cursor,
       local,
     });
-    const requested = new Set(select);
-    let items = (page.items as Record<string, JsonValue>[]).map((it) => {
-      // Поля, добавленные только для проверки «!%», в ответ не попадают.
-      if (!local.length || requested.has('*')) return it;
-      const out: Record<string, JsonValue> = {};
-      for (const [k, v] of Object.entries(it))
-        if (requested.has(k) || (requested.has('UF_*') && k.startsWith('UF_'))) out[k] = v;
-      return out;
-    });
+    // Портал может проигнорировать select; служебный ID и поля локальных условий не выдаются.
+    let items = (page.items as Record<string, JsonValue>[]).map((it) => pickFields(it, select));
     const warnings: string[] = [];
     if (args.withNames) {
       const names = new NameResolver(ctx);

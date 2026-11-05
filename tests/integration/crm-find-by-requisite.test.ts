@@ -37,7 +37,7 @@ beforeEach(async () => {
   });
   const connected = await connectInMemory(t.app);
   client = connected.client;
-  close = connected.close;
+  close = () => connected.close();
 });
 
 afterEach(async () => {
@@ -46,6 +46,15 @@ afterEach(async () => {
 });
 
 describe('crm_find_by_requisite', () => {
+  it('supports a 12-digit INN and contact owner; an empty page is complete', async () => {
+    t.bitrix.on('crm.requisite.list', legacyOk([]));
+    const result = await call({ inn: '123456789012', ownerEntityTypeId: 3, pageSize: 1 });
+    expect(result.success).toBe(true);
+    expect(result.data.items).toEqual([]);
+    expect(result.meta.page.hasMore).toBe(false);
+    expect(t.bitrix.calls[0]?.body['filter']).toEqual({ RQ_INN: '123456789012', ENTITY_TYPE_ID: 3 });
+  });
+
   it('uses exact INN in one read and strips unexpected personal fields', async () => {
     const result = await call({ inn: '7728150075', pageSize: 2 });
     expect(result.success).toBe(true);

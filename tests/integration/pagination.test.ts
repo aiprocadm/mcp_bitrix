@@ -29,6 +29,19 @@ function setup(ttl = 600) {
 }
 
 describe('пагинация (T20, T21, ТЗ §14.3)', () => {
+  it('непродвигающийся next отвергается вместо повторного чтения той же страницы', async () => {
+    const { store, binding } = setup();
+    await expect(
+      paginateLegacy({
+        store,
+        binding,
+        cursor: undefined,
+        pageSize: 20,
+        fetchPage: () => Promise.resolve({ items: [], next: 0, total: undefined }),
+      }),
+    ).rejects.toMatchObject({ code: 'BITRIX_UPSTREAM_ERROR' });
+  });
+
   it('T20: upstream 50, pageSize 20 → три страницы без пропусков и дублей, один upstream-запрос', async () => {
     const { store, fetchPage, binding, upstreamCalls } = setup();
     const p1 = await paginateLegacy({ store, binding, cursor: undefined, pageSize: 20, fetchPage });

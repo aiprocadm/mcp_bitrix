@@ -42,6 +42,7 @@ function matches(r: Row, filter: Row): boolean {
     const val = r[m?.[2] ?? ''];
     const s = typeof val === 'string' || typeof val === 'number' ? String(val) : '';
     if (op === '>' && !(Number(s) > Number(v))) return false;
+    if (op === '<' && !(Number(s) < Number(v))) return false;
     if (op === '>=' && !(s >= String(v))) return false;
     if (op === '<=' && !(s <= String(v))) return false;
     if (op === '@' && !(v as unknown[]).map(String).includes(s)) return false;

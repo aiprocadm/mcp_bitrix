@@ -13,6 +13,12 @@ const outDir = path.join(root, 'docs', 'schemas');
 mkdirSync(outDir, { recursive: true });
 
 const lines: string[] = [
+  '---',
+  'name: Каталог инструментов',
+  'description: Описания и схемы реализованных инструментов MCP, генерируются из исходников',
+  'type: reference',
+  '---',
+  '',
   '# Каталог инструментов',
   '',
   'Раздел «Реализовано» генерируется командой `npm run schemas:export` из кода; правки вносить в исходники инструментов.',

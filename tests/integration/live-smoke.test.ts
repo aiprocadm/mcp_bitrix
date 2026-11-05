@@ -18,7 +18,7 @@ import {
   DEAL_FIELDS,
   dealRecord,
   deals,
-  legacyListPage,
+  legacyIdList,
   legacyOk,
   PROFILE_RESULT,
   TASK_FIELDS,
@@ -54,7 +54,7 @@ function portal(overrides: Record<string, string> = {}) {
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
     // срез 10: STAGE_ID сверяется со справочником стадий до плана (INVALID_STAGE)
     .on('crm.status.list', legacyOk(STATUS_LISTS['DEAL_STAGE']))
-    .on('crm.deal.list', (c) => legacyListPage(ALL, Number(c.body['start'] ?? 0), 50))
+    .on('crm.deal.list', (c) => legacyIdList(ALL as { ID: string }[], c.body))
     .on('crm.deal.get', (c) =>
       legacyOk(
         created.get(`deal:${String(c.body['id'])}`) ??
@@ -153,7 +153,7 @@ describe('live-smoke (§10.3) на mock', () => {
       'passed',
     ]);
     expect(steps[3]?.detail).toContain('получено 5');
-    expect(steps[4]?.ids).toEqual({ dealId: 1 });
+    expect(steps[4]?.ids).toEqual({ dealId: 7 });
     for (const m of [
       'crm.deal.add',
       'tasks.task.add',

@@ -180,12 +180,15 @@ export async function paginateLegacy(opts: {
   let calls = 0;
   while (items.length < opts.pageSize && state.start !== undefined && calls < maxCalls) {
     const page = await opts.fetchPage(state.start);
+    if (page.next !== undefined && (!Number.isSafeInteger(page.next) || page.next <= state.start)) {
+      throw new AppError('BITRIX_UPSTREAM_ERROR', 'Список вернул непродвигающееся смещение страницы');
+    }
     calls += 1;
     items = items.concat(page.items);
     upstreamTotal = page.total;
     // Только фактический `next`; отсутствие next = страниц больше нет.
     state = { start: page.next, buffer: [] };
-    if (page.items.length === 0) state = { start: undefined, buffer: [] };
+    // После локальной фильтрации страница может быть пустой при наличии upstream next.
   }
   // Курсор расходуется только после успешной загрузки: сбой портала выше оставляет его рабочим.
   if (opts.cursor) await opts.store.discard(opts.cursor);

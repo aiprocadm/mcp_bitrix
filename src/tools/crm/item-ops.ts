@@ -10,6 +10,7 @@ import { ok, type Envelope } from '../../mcp/result.js';
 import type { PerformResult } from '../../security/mutation-executor.js';
 import { mutationPrincipal, mutationResponse, pageMeta, pageSizeOf } from '../shared.js';
 import type { ToolContext } from '../types.js';
+import { isEmptyValue } from './names.js';
 import { classicEntity, CLASSIC_ENTITY_TYPES, type ClassicEntity } from './entities.js';
 import {
   validateItemFieldsForWrite,
@@ -124,13 +125,17 @@ export async function itemListEnvelope(
     select?: string[] | undefined;
     pageSize?: number | undefined;
     cursor?: string | undefined;
+    compact?: boolean | undefined;
   },
   base: Record<string, unknown>,
 ): Promise<Envelope> {
   const meta = await getItemFieldsMeta(ctx, target);
   const filter = validateItemFilter(args.filter, meta);
   const order = validateItemOrder(args.order ?? { id: 'DESC' }, meta);
-  const select = validateItemSelect(args.select ?? defaultItemSelect(target, meta), meta);
+  const defaults = args.compact
+    ? ['id', 'title', 'createdTime', 'assignedById'].filter((f) => Object.hasOwn(meta, f))
+    : defaultItemSelect(target, meta);
+  const select = validateItemSelect(args.select ?? defaults, meta);
   const page = await itemsPage(ctx, target, {
     tool: args.tool,
     filter,
@@ -142,7 +147,12 @@ export async function itemListEnvelope(
   return ok(
     {
       ...base,
-      items: page.items as Record<string, unknown>[],
+      items: (page.items as CrmItem[]).map((item) => {
+        const picked = pickItemFields(item, select);
+        return args.compact
+          ? Object.fromEntries(Object.entries(picked).filter(([, value]) => !isEmptyValue(value)))
+          : picked;
+      }),
       returnedCount: page.items.length,
       ...(page.upstreamTotal !== undefined ? { upstreamTotal: page.upstreamTotal } : {}),
     },

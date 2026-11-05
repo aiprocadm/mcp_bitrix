@@ -29,8 +29,9 @@ interface Compose {
 }
 
 function loadCompose(): Compose {
+  if (PYTHON === undefined) throw new Error('Python для проверки YAML не настроен');
   const r = spawnSync(
-    PYTHON!,
+    PYTHON,
     [
       '-c',
       'import sys,yaml,json; json.dump(yaml.safe_load(open(sys.argv[1])), sys.stdout)',
@@ -80,8 +81,9 @@ describe('deploy/saas', () => {
   );
 
   it.skipIf(!PYYAML)('правила алертов: YAML корректен, метрики — из реестра сервиса', () => {
+    if (PYTHON === undefined) throw new Error('Python для проверки YAML не настроен');
     const r = spawnSync(
-      PYTHON!,
+      PYTHON,
       [
         '-c',
         'import sys,yaml,json; json.dump(yaml.safe_load(open(sys.argv[1])), sys.stdout)',
