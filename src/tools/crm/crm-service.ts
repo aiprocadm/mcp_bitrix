@@ -65,8 +65,8 @@ export function keysetDirection(
   const dir = order['ID'] === 'ASC' ? 'ASC' : 'DESC';
   const bound = filter[dir === 'ASC' ? '>ID' : '<ID'];
   const numeric =
-    (typeof bound === 'number' && Number.isSafeInteger(bound)) ||
-    (typeof bound === 'string' && /^\d{1,15}$/.test(bound));
+    (typeof bound === 'number' && Number.isSafeInteger(bound) && bound >= 0) ||
+    (typeof bound === 'string' && /^\d+$/.test(bound) && Number.isSafeInteger(Number(bound)));
   if (bound !== undefined && !numeric) return null;
   return dir;
 }
@@ -99,9 +99,11 @@ export async function listRecords(
     }),
   };
   const local = args.local ?? [];
-  const select =
-    args.select && local.length ? [...new Set([...args.select, ...local.map((c) => c.field)])] : args.select;
   const direction = keysetDirection(args.order, args.filter);
+  // ID нужен для продолжения даже при select=['TITLE']; служебные поля убираются в ответе.
+  const select = args.select
+    ? [...new Set([...args.select, ...local.map((c) => c.field), ...(direction ? ['ID'] : [])])]
+    : args.select;
   if (direction) {
     return paginateKeyset({
       store: ctx.cursors,
@@ -123,8 +125,19 @@ export async function listRecords(
         if (!Array.isArray(r.result)) throw upstream(method, `${method} вернул не массив`);
         const raw = r.result as unknown[];
         const ids = raw.map((x) => (x && typeof x === 'object' ? Number((x as JsonObject)['ID']) : NaN));
-        if (ids.some((id) => !Number.isSafeInteger(id)))
-          throw upstream(method, `${method}: строка без числового ID`);
+        if (
+          ids.some((id, i) => {
+            const previous = i === 0 ? after : ids[i - 1];
+            return (
+              !Number.isSafeInteger(id) ||
+              id <= 0 ||
+              (previous !== null &&
+                previous !== undefined &&
+                (direction === 'ASC' ? id <= previous : id >= previous))
+            );
+          })
+        )
+          throw upstream(method, `${method}: ID отсутствует или порядок не продвигается`);
         const items = local.length
           ? r.result.filter((x) => !!x && typeof x === 'object' && !Array.isArray(x) && passesLocal(x, local))
           : r.result;

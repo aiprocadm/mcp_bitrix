@@ -12,7 +12,7 @@ import {
   dealRecord,
   deals,
   legacyError,
-  legacyListPage,
+  legacyIdList,
   legacyOk,
 } from '../helpers/mock-bitrix.js';
 import { STATUS_LISTS } from '../helpers/mock-crm.js';
@@ -37,7 +37,7 @@ function setup(overrides: Record<string, string> = {}) {
   t.bitrix
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
     .on('crm.status.list', legacyOk(STATUS_LISTS['DEAL_STAGE']))
-    .on('crm.deal.list', (c) => legacyListPage(ALL_DEALS, Number(c.body['start'] ?? 0), 50))
+    .on('crm.deal.list', (c) => legacyIdList(ALL_DEALS as { ID: string }[], c.body))
     .on('crm.deal.get', (c) => {
       const id = Number(c.body['id']);
       return id >= 1 && id <= 50 ? legacyOk(ALL_DEALS[id - 1]) : legacyError('NOT_FOUND', 400, 'Not found');
@@ -87,6 +87,7 @@ describe('crm_list_records', () => {
   it('T20 через MCP: 50 сделок по 20 — три страницы без пропусков, один запрос к порталу', async () => {
     const p1 = await call('crm_list_records', {
       entityType: 'deal',
+      order: { ID: 'ASC' },
       pageSize: 20,
       filter: { '%TITLE': 'MCP TEST' },
     });
@@ -98,12 +99,14 @@ describe('crm_list_records', () => {
     expect(page1.hasMore).toBe(true);
     const p2 = await call('crm_list_records', {
       entityType: 'deal',
+      order: { ID: 'ASC' },
       pageSize: 20,
       filter: { '%TITLE': 'MCP TEST' },
       cursor: page1.nextCursor,
     });
     const p3 = await call('crm_list_records', {
       entityType: 'deal',
+      order: { ID: 'ASC' },
       pageSize: 20,
       filter: { '%TITLE': 'MCP TEST' },
       cursor: (p2.meta['page'] as { nextCursor: string }).nextCursor,
@@ -114,7 +117,7 @@ describe('crm_list_records', () => {
     expect(ids).toEqual(ALL_DEALS.map((d) => d.ID));
     expect(t.bitrix.callsTo('crm.deal.list')).toHaveLength(1);
     const sent = t.bitrix.callsTo('crm.deal.list')[0]?.body;
-    expect(sent).toMatchObject({ filter: { '%TITLE': 'MCP TEST' }, order: { ID: 'DESC' }, start: 0 });
+    expect(sent).toMatchObject({ filter: { '%TITLE': 'MCP TEST' }, order: { ID: 'ASC' }, start: 0 });
     expect(sent?.['select'] as string[]).toContain('TITLE');
   });
 

@@ -222,7 +222,11 @@ export async function activitiesPage(
         { requestId: ctx.requestId, signal: ctx.signal },
       );
       if (!Array.isArray(r.result)) throw upstream('crm.activity.list', 'crm.activity.list вернул не массив');
-      return { items: r.result, next: r.next, total: r.total };
+      // Некоторые порталы возвращают поля сверх select: тело, контакты и файлы не должны просочиться.
+      const items = r.result
+        .filter(isObj)
+        .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => select.includes(key))));
+      return { items, next: r.next, total: r.total };
     },
   });
 }

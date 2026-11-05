@@ -19,7 +19,7 @@ import { dispatch } from '../../src/mcp/register-tools.js';
 import type { Envelope } from '../../src/mcp/result.js';
 import { makeFakeCreateTool, type FakeWriteHooks } from '../helpers/fake-write-tool.js';
 import { TEST_KEY, testConfig } from '../helpers/app.js';
-import { deals, legacyListPage, legacyOk, MockBitrix, DEAL_FIELDS } from '../helpers/mock-bitrix.js';
+import { deals, legacyIdList, legacyOk, MockBitrix, DEAL_FIELDS } from '../helpers/mock-bitrix.js';
 
 function portalAuth(host: string): BitrixAuthProvider {
   const origin = `https://${host}`;
@@ -46,7 +46,7 @@ beforeEach(async () => {
   const all = deals(1, 60);
   bitrix
     .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
-    .on('crm.deal.list', (c) => legacyListPage(all, Number(c.body['start'] ?? 0), 50))
+    .on('crm.deal.list', (c) => legacyIdList(all, c.body))
     .on('crm.deal.add', legacyOk(101));
   platform = createPlatform(testConfig({ READ_ONLY_MODE: 'false' }), {
     fetch: bitrix.fetch,

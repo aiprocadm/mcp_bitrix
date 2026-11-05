@@ -8,7 +8,7 @@ import {
   DEAL_FIELDS,
   dealRecord,
   deals,
-  legacyListPage,
+  legacyIdList,
   legacyOk,
   PROFILE_RESULT,
 } from '../helpers/mock-bitrix.js';
@@ -24,7 +24,7 @@ describe('Streamable HTTP', () => {
       .on('profile', legacyOk(PROFILE_RESULT))
       .on('scope', legacyOk(['crm']))
       .on('crm.deal.fields', legacyOk(DEAL_FIELDS))
-      .on('crm.deal.list', (c) => legacyListPage(ALL, Number(c.body['start'] ?? 0), 50));
+      .on('crm.deal.list', (c) => legacyIdList(ALL as { ID: string }[], c.body));
     handle = await startHttp(t.app, { host: '127.0.0.1', port: 0 });
   });
   afterAll(async () => {

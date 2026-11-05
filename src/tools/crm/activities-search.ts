@@ -169,6 +169,12 @@ export const crmActivitiesSearchTool = defineTool({
       bindingParts: { filter, select, dateField: args.dateField },
       pageSize: pageSizeOf(ctx, args.pageSize),
       cursor: args.cursor,
+      extract: (result) =>
+        Array.isArray(result)
+          ? result
+              .filter(isObj)
+              .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => select.includes(key))))
+          : undefined,
     });
     let items: Record<string, unknown>[] = page.items
       .filter(isObj)
